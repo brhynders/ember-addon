@@ -18,7 +18,8 @@ and a scrobbler service.
 
 | File | Role |
 |------|------|
-| `addon.py` | Entry point. The **only** module with `@router.route`. Each handler fetches from `tmdb`, builds a `List` of `Item`s, and renders. Ends with `router.run()`. |
+| `addon.py` | Thin entry point: imports `resources.routes` (registering the routes) then calls `router.run()`. |
+| `routes.py` | Every `@router.route` handler. Each fetches from `tmdb`/`trakt`, builds a `List` of `Item`s, and renders. |
 | `ui.py` | TMDB-backed subclasses of the framework bases — the screen vocabulary. |
 | `tmdb.py` | TMDB v3 client, JSON→metadata mappers, and the browse data tables. |
 | `scrapers.py` | Stremio stream scrapers (base `Scraper` + subclasses) → playable `Stream`s. |
@@ -71,9 +72,11 @@ into the items — items never know the route map.
 
 ---
 
-## `addon.py` — routes
+## `routes.py` — routes
 
-All routes live here. The shared helper `_media_list(media, data, more_url)`
+All routes live here (imported by the thin `addon.py` entry, so they register
+once per interpreter — see framework.md §3.1). The shared helper
+`_media_list(media, data, more_url)`
 turns a TMDB list response into a paginated `Movies`/`Shows`, appending a
 "Next Page" entry while `router.page < tmdb.total(data)`.
 

@@ -17,9 +17,10 @@ subclasses — see [`addon.md`](addon.md).
 ├── build.py            # single source of truth: builds the add-on + its repo
 ├── icon.png            # the ONE committed icon (master); copied in at build time
 ├── src/                # hand-written code ONLY (no generated files live here)
-│   ├── addon.py        # entry point: every @router.route handler + run loop
+│   ├── addon.py        # thin entry: import the routes module, then router.run()
 │   └── resources/
 │       ├── framework.py    # the generic framework (this doc's subject)
+│       ├── routes.py       # all @router.route handlers (imported by addon.py)
 │       ├── settings.xml    # user-facing settings
 │       └── ...             # add-on-specific modules (see addon.md)
 ├── dist/               # GENERATED — committed so GitHub Pages can serve it
@@ -42,8 +43,8 @@ Two hard rules underpin everything:
   it as the Kodi repository), but you never hand-edit it. Zips are byte-stable
   (fixed timestamps), so rebuilding without source changes produces no diff.
 
-(The framework imposes one usage convention too — route handlers live only in
-`addon.py`; see §3.1.)
+(The framework imposes one usage convention too — all routes live in a single
+imported `routes` module, kept out of the re-executed entry script; see §3.1.)
 
 ---
 
@@ -137,12 +138,17 @@ handler raising) it logs, notifies "Something went wrong", and ends the
 directory with `succeeded=False` so Kodi doesn't hang — that is the *only* time
 the router itself touches the listing API.
 
-**Framework convention — route handlers live only in `addon.py`.** It is the
-sole module that uses `@router.route`: the entry point Kodi runs, and the one
-place to look for the full URL map. Other modules (the domain layer, playback,
-etc.) expose plain functions that those handlers call; they never register
-routes of their own. Keep handlers thin — fetch data, build a `List` of
-`Item`s, render — and delegate anything heavier to a domain module.
+**Framework convention — all routes in one imported module, not the entry
+script.** Every `@router.route` lives in a single `routes` module (in Ember,
+`resources/routes.py`); the entry script (`addon.py`) just imports it and calls
+`router.run()`. This matters under `reuseLanguageInvoker`: the entry script
+re-executes on **every** navigation, but imported modules are cached in
+`sys.modules` and their top level does **not** re-run. Putting the decorators in
+an imported module means routes register **once per interpreter**; putting them
+in the entry script would re-run the decorators each navigation, appending
+duplicate routes to the persistent `router` singleton and slowing dispatch over
+a session. Keep handlers thin — fetch data, build a `List` of `Item`s, render —
+and delegate anything heavier to a domain module.
 
 ### 3.2 Response cache — the `cache` singleton
 
@@ -219,21 +225,21 @@ lst.next_page(url)              # append a "Next Page >>" folder entry
 ### Generic request flow
 
 ```
-Kodi launches addon.py
-      │
+Kodi launches addon.py  ── imports the routes module (registers routes once),
+      │                     then router.run()
       ▼
   router.run()  ── parse sys.argv (handle, params, page), match path
       │
       ▼
-  @router.route handler (in addon.py)
+  @router.route handler (in the routes module)
       │  fetch data (optionally via cache)
       │  build a List of Item subclasses
       ▼
   List.render()  ──▶  xbmcplugin.addDirectoryItems + setContent + endOfDirectory
 ```
 
-A playable row points its URL at a `/play/...` route whose handler resolves the
-stream instead of rendering a directory.
+A playable row points its URL at a route whose handler resolves a stream (or
+lists sources) instead of rendering a directory.
 
 ---
 
@@ -242,7 +248,8 @@ stream instead of rendering a directory.
 The framework and build system are add-on agnostic. To start a new add-on:
 
 1. Copy `build.py`, `framework.py`, and `icon.png`; edit `build.py`'s CONFIG.
-2. Write `addon.py` with your routes and a domain layer (your client/mappers).
+2. Put your routes in a `routes` module and keep `addon.py` a thin entry that
+   imports it then calls `router.run()`; add a domain layer (your client/mappers).
 3. Subclass `Item` / `List` for your media rows; keep `addon.py` the sole owner
    of `@router.route`.
 4. `python3 build.py --install` and iterate.
