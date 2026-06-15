@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<settings version="1">
-    <section id="plugin.video.ember">
-        <category id="general" label="General">
-            <group id="1">
-                <setting id="tmdb_lang" type="string" label="TMDB Language">
-                    <level>0</level>
-                    <default>en-US</default>
-                    <control type="edit" format="string">
-                        <heading>TMDB Language</heading>
-                    </control>
-                </setting>
-            </group>
-        </category>
-    </section>
+<settings>
+    <category label="General">
+        <setting id="tmdb_lang" type="text" label="TMDB Language" default="en-US"/>
+        <setting id="trakt_scrobble" type="bool" label="Scrobble to Trakt" default="true"/>
+    </category>
+    <category label="Scrapers">
+        <setting id="torbox_api_key" type="text" label="TorBox API Key" default=""/>
+        <setting id="scraper_torrentio" type="bool" label="Enable Torrentio" default="true"/>
+        <setting id="scraper_comet" type="bool" label="Enable Comet" default="true"/>
+        <setting id="scraper_mediafusion" type="bool" label="Enable MediaFusion" default="true"/>
+    </category>
 </settings>

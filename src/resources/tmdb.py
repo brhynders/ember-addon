@@ -160,8 +160,19 @@ def show_details(tmdb_id):
                 append_to_response="external_ids")
 
 
+def movie_details(tmdb_id):
+    return _get("movie/{0}".format(tmdb_id), ttl=TTL_DETAIL,
+                append_to_response="external_ids")
+
+
 def season_details(tmdb_id, season_number):
     return _get("tv/{0}/season/{1}".format(tmdb_id, season_number), ttl=TTL_DETAIL)
+
+
+def imdb_id(media, tmdb_id):
+    """The IMDb id ("tt…") for a movie/show, or "" — needed for Stremio scrapers."""
+    details = movie_details(tmdb_id) if media == "movie" else show_details(tmdb_id)
+    return (details.get("external_ids") or {}).get("imdb_id") or ""
 
 
 # ---------------------------------------------------------------------------
