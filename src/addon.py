@@ -10,7 +10,7 @@ from datetime import date
 
 from resources import playback, tmdb
 from resources.framework import cache, keyboard, notify, open_settings, router
-from resources.ui import Directory, Episode, Episodes, Menu, Movie, Movies, Show, Shows, cancel
+from resources.ui import Episode, Episodes, Menu, MenuItem, Movie, Movies, Show, Shows, cancel
 
 
 # ---------------------------------------------------------------------------
@@ -36,52 +36,52 @@ def _media_list(media, data, more_url):
 @router.route("/")
 def home():
     Menu([
-        Directory("Movies", router.url_for("/movies"), icon="DefaultMovies.png"),
-        Directory("TV Shows", router.url_for("/tv"), icon="DefaultTVShows.png"),
-        Directory("Tools", router.url_for("/tools"), icon="DefaultAddonProgram.png"),
+        MenuItem("Movies", router.url_for("/movies"), icon="DefaultMovies.png"),
+        MenuItem("TV Shows", router.url_for("/tv"), icon="DefaultTVShows.png"),
+        MenuItem("Tools", router.url_for("/tools"), icon="DefaultAddonProgram.png"),
     ]).render()
 
 
 @router.route("/movies")
 def movies_menu():
     Menu([
-        Directory("Search", router.url_for("/search/movie"), icon="DefaultAddonsSearch.png"),
-        Directory("Trending", router.url_for("/list/movie/trending"), icon="DefaultRecentlyAddedMovies.png"),
-        Directory("Popular", router.url_for("/list/movie/popular"), icon="DefaultFavourites.png"),
-        Directory("In Theaters", router.url_for("/list/movie/now_playing"), icon="DefaultInProgressShows.png"),
-        Directory("Top Rated", router.url_for("/list/movie/top_rated"), icon="DefaultMusicTop100.png"),
-        Directory("Upcoming", router.url_for("/list/movie/upcoming"), icon="DefaultYear.png"),
-        Directory("Premieres", router.url_for("/named/movie/premieres"), icon="DefaultRecentlyAddedMovies.png"),
-        Directory("Most Voted", router.url_for("/named/movie/most_voted"), icon="DefaultMusicTop100.png"),
-        Directory("Blockbusters", router.url_for("/named/movie/blockbusters"), icon="DefaultMovies.png"),
-        Directory("Genres", router.url_for("/genres/movie"), icon="DefaultGenre.png"),
-        Directory("Years", router.url_for("/years/movie"), icon="DefaultYear.png"),
-        Directory("Languages", router.url_for("/languages/movie"), icon="DefaultAddonLanguage.png"),
+        MenuItem("Search", router.url_for("/search/movie"), icon="DefaultAddonsSearch.png"),
+        MenuItem("Trending", router.url_for("/list/movie/trending"), icon="DefaultRecentlyAddedMovies.png"),
+        MenuItem("Popular", router.url_for("/list/movie/popular"), icon="DefaultFavourites.png"),
+        MenuItem("In Theaters", router.url_for("/list/movie/now_playing"), icon="DefaultInProgressShows.png"),
+        MenuItem("Top Rated", router.url_for("/list/movie/top_rated"), icon="DefaultMusicTop100.png"),
+        MenuItem("Upcoming", router.url_for("/list/movie/upcoming"), icon="DefaultYear.png"),
+        MenuItem("Premieres", router.url_for("/named/movie/premieres"), icon="DefaultRecentlyAddedMovies.png"),
+        MenuItem("Most Voted", router.url_for("/named/movie/most_voted"), icon="DefaultMusicTop100.png"),
+        MenuItem("Blockbusters", router.url_for("/named/movie/blockbusters"), icon="DefaultMovies.png"),
+        MenuItem("Genres", router.url_for("/genres/movie"), icon="DefaultGenre.png"),
+        MenuItem("Years", router.url_for("/years/movie"), icon="DefaultYear.png"),
+        MenuItem("Languages", router.url_for("/languages/movie"), icon="DefaultAddonLanguage.png"),
     ]).render()
 
 
 @router.route("/tv")
 def tv_menu():
     Menu([
-        Directory("Search", router.url_for("/search/tv"), icon="DefaultAddonsSearch.png"),
-        Directory("Trending", router.url_for("/list/tv/trending"), icon="DefaultRecentlyAddedMovies.png"),
-        Directory("Popular", router.url_for("/list/tv/popular"), icon="DefaultFavourites.png"),
-        Directory("On The Air", router.url_for("/list/tv/on_the_air"), icon="DefaultInProgressShows.png"),
-        Directory("Airing Today", router.url_for("/list/tv/airing_today"), icon="DefaultInProgressShows.png"),
-        Directory("Top Rated", router.url_for("/list/tv/top_rated"), icon="DefaultMusicTop100.png"),
-        Directory("Most Voted", router.url_for("/named/tv/most_voted"), icon="DefaultMusicTop100.png"),
-        Directory("Genres", router.url_for("/genres/tv"), icon="DefaultGenre.png"),
-        Directory("Networks", router.url_for("/networks"), icon="DefaultStudios.png"),
-        Directory("Years", router.url_for("/years/tv"), icon="DefaultYear.png"),
-        Directory("Languages", router.url_for("/languages/tv"), icon="DefaultAddonLanguage.png"),
+        MenuItem("Search", router.url_for("/search/tv"), icon="DefaultAddonsSearch.png"),
+        MenuItem("Trending", router.url_for("/list/tv/trending"), icon="DefaultRecentlyAddedMovies.png"),
+        MenuItem("Popular", router.url_for("/list/tv/popular"), icon="DefaultFavourites.png"),
+        MenuItem("On The Air", router.url_for("/list/tv/on_the_air"), icon="DefaultInProgressShows.png"),
+        MenuItem("Airing Today", router.url_for("/list/tv/airing_today"), icon="DefaultInProgressShows.png"),
+        MenuItem("Top Rated", router.url_for("/list/tv/top_rated"), icon="DefaultMusicTop100.png"),
+        MenuItem("Most Voted", router.url_for("/named/tv/most_voted"), icon="DefaultMusicTop100.png"),
+        MenuItem("Genres", router.url_for("/genres/tv"), icon="DefaultGenre.png"),
+        MenuItem("Networks", router.url_for("/networks"), icon="DefaultStudios.png"),
+        MenuItem("Years", router.url_for("/years/tv"), icon="DefaultYear.png"),
+        MenuItem("Languages", router.url_for("/languages/tv"), icon="DefaultAddonLanguage.png"),
     ]).render()
 
 
 @router.route("/tools")
 def tools_menu():
     Menu([
-        Directory("Settings", router.url_for("/settings"), icon="DefaultAddonService.png"),
-        Directory("Clear Cache", router.url_for("/clear-cache"), icon="DefaultAddonProgram.png"),
+        MenuItem("Settings", router.url_for("/settings"), icon="DefaultAddonService.png"),
+        MenuItem("Clear Cache", router.url_for("/clear-cache"), icon="DefaultAddonProgram.png"),
     ]).render()
 
 
@@ -128,7 +128,7 @@ def search_list(media):
 # ---------------------------------------------------------------------------
 @router.route("/genres/{media}")
 def genres_menu(media):
-    Menu(Directory(g["name"], router.url_for("/discover/{0}".format(media), with_genres=g["id"]),
+    Menu(MenuItem(g["name"], router.url_for("/discover/{0}".format(media), with_genres=g["id"]),
                    icon="DefaultGenre.png")
          for g in tmdb.genres(media)).render()
 
@@ -136,21 +136,21 @@ def genres_menu(media):
 @router.route("/years/{media}")
 def years_menu(media):
     field = "primary_release_year" if media == "movie" else "first_air_date_year"
-    Menu(Directory(str(y), router.url_for("/discover/{0}".format(media), **{field: y}),
+    Menu(MenuItem(str(y), router.url_for("/discover/{0}".format(media), **{field: y}),
                    icon="DefaultYear.png")
          for y in range(date.today().year, 1969, -1)).render()
 
 
 @router.route("/languages/{media}")
 def languages_menu(media):
-    Menu(Directory(name, router.url_for("/discover/{0}".format(media), with_original_language=code),
+    Menu(MenuItem(name, router.url_for("/discover/{0}".format(media), with_original_language=code),
                    icon="DefaultAddonLanguage.png")
          for name, code in tmdb.LANGUAGES).render()
 
 
 @router.route("/networks")
 def networks_menu():
-    Menu(Directory(name, router.url_for("/discover/tv", with_networks=nid),
+    Menu(MenuItem(name, router.url_for("/discover/tv", with_networks=nid),
                    icon="DefaultStudios.png")
          for name, nid in tmdb.NETWORKS).render()
 
@@ -177,7 +177,7 @@ def seasons_menu(id):
         url = router.url_for("/tv/show/{0}/season/{1}".format(id, num),
                              show_title=show_info["title"],
                              year=show_info.get("year", ""), imdb=imdb)
-        menu.add(Directory("Season {0}".format(num), url, info=info, art=art,
+        menu.add(MenuItem("Season {0}".format(num), url, info=info, art=art,
                            media_type="season"))
     menu.render()
 

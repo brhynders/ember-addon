@@ -1,10 +1,10 @@
 """Add-on List and Item types — TMDB-backed subclasses of the framework bases.
 
-The framework owns generic directory rendering (resources/framework/ui.py);
+The framework owns generic directory rendering (resources/framework.py);
 here we subclass its Item/List to wrap raw TMDB result dicts into rows:
 
     Episodes(Episode(ep, show_info, show_art, url) for ep in episodes).render()
-    Menu([Directory("Movies", router.url_for("/movies"), icon="...")]).render()
+    Menu([MenuItem("Movies", router.url_for("/movies"), icon="...")]).render()
 
 Route handlers build the target URLs themselves (router.url_for) and pass them
 in — Items don't know the route map. Movie/Show/Episode wrap the TMDB mappers so
@@ -25,7 +25,7 @@ def cancel():
 # ===========================================================================
 # Item subclasses — each sets folder/playable/media-type and wraps a mapper
 # ===========================================================================
-class Directory(Item):
+class MenuItem(Item):
     """A folder entry that opens another route (menu items, sub-listings)."""
     is_folder = True
     is_playable = False
