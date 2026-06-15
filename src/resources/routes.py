@@ -10,10 +10,12 @@ reuseLanguageInvoker the entry re-executes every navigation, but imported module
 are cached — so importing this registers all routes exactly once per interpreter,
 not once per navigation.
 """
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
-from resources import scrapers, tmdb, trakt
+# `scrapers` (and the ThreadPoolExecutor it pulls in via concurrent.futures) is
+# imported lazily inside the few handlers that need it, to keep that weight off
+# the menu-browsing path. tmdb/trakt are light and used pervasively, so stay here.
+from resources import tmdb, trakt
 from resources.framework import cache, keyboard, notify, open_settings, router
 from resources.ui import (Episode, Episodes, Menu, MenuItem, Movie, Movies, Season,
                           Show, Shows, Source, Sources, cancel)
@@ -277,6 +279,7 @@ def _show_sources(media_type, video_id, info, kodi_type):
     `info`/`kodi_type` ride along onto each Source so the played item carries
     its tmdb id + season/episode, which the scrobbler service reads.
     """
+    from resources import scrapers  # lazy — keeps concurrent.futures off the menu path
     if not scrapers.configured():
         notify("Set your TorBox API key in settings")
         return cancel()
@@ -313,6 +316,7 @@ def episode_sources(id, season, episode):
 # ---------------------------------------------------------------------------
 def _hydrate(media, tmdb_ids):
     """Fetch TMDB details for ids in parallel and build Movie/Show rows."""
+    from concurrent.futures import ThreadPoolExecutor  # lazy — only Trakt lists need it
     fetch = tmdb.movie_details if media == "movie" else tmdb.show_details
     with ThreadPoolExecutor(max_workers=10) as pool:
         details = list(pool.map(fetch, tmdb_ids))
