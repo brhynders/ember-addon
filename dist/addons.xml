@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addons>
+<addon id="plugin.video.ember" name="Ember" version="0.1.0" provider-name="Ember">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="default.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <reuselanguageinvoker>true</reuselanguageinvoker>
+        <summary lang="en_GB">Ember - lightweight movie &amp; TV streaming</summary>
+        <description lang="en_GB">A clean, English-only streaming browser built from scratch.</description>
+        <platform>all</platform>
+        <license>GPL-3.0-or-later</license>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
+<addon id="repository.ember" name="Ember Repository" version="1.0.0" provider-name="brhynders">
+    <extension point="xbmc.addon.repository" name="Ember Repository">
+        <dir>
+            <info compressed="false">https://brhynders.github.io/dist/addons.xml</info>
+            <checksum>https://brhynders.github.io/dist/addons.xml.md5</checksum>
+            <datadir zip="true">https://brhynders.github.io/dist</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">Ember add-on repository</summary>
+        <description lang="en_GB">Install and auto-update Ember from this repository.</description>
+        <platform>all</platform>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
+</addons>
