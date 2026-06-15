@@ -11,7 +11,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from resources.framework import cache_get, cache_set, plugin
+from resources.framework import cache, get_setting, log_error
 
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p"
@@ -52,11 +52,11 @@ NAMED = {
 # Client
 # ---------------------------------------------------------------------------
 def _key():
-    return plugin.get_setting("tmdb_api_key") or DEFAULT_KEY
+    return get_setting("tmdb_api_key") or DEFAULT_KEY
 
 
 def _lang():
-    return plugin.get_setting("tmdb_lang") or "en-US"
+    return get_setting("tmdb_lang") or "en-US"
 
 
 def _get(path, ttl=TTL_LIST, **params):
@@ -64,7 +64,7 @@ def _get(path, ttl=TTL_LIST, **params):
     params.setdefault("language", _lang())
     ck_params = {k: v for k, v in params.items() if k != "api_key"}
     ck = "tmdb:{0}:{1}".format(path, json.dumps(ck_params, sort_keys=True))
-    hit = cache_get(ck)
+    hit = cache.get(ck)
     if hit is not None:
         return hit
     url = "{0}/{1}?{2}".format(API, path.lstrip("/"), urlencode(params))
@@ -72,10 +72,10 @@ def _get(path, ttl=TTL_LIST, **params):
         with urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except (URLError, ValueError, OSError) as exc:  # surface, never crash the menu
-        plugin.log_error("TMDB request failed for {0}: {1}".format(path, exc))
+        log_error("TMDB request failed for {0}: {1}".format(path, exc))
         return {}
     if data:
-        cache_set(ck, data, ttl)
+        cache.set(ck, data, ttl)
     return data
 
 
