@@ -1,16 +1,17 @@
-"""TMDB v3 client, JSON→row mappers, and the registered TMDB providers.
+"""TMDB v3 client and JSON→metadata mappers.
 
-Bottom layer: the client (`_get` + movies/shows/discover/...). Top layer: the
-@plugin.provider / @plugin.folder functions that turn it into menu rows/nodes.
+The TMDB knowledge layer: the client (`_get` + movies/shows/discover/...), the
+mappers that turn results into the framework's info/art dicts, and the menu
+data tables (NAMED/LANGUAGES/NETWORKS). The addon's route handlers (addon.py)
+and UI classes (ui.py) consume these; nothing here touches Kodi listings.
 Uses stdlib urllib (no 'requests'); responses go through the framework cache.
 """
 import json
-from datetime import date
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from resources.framework import MediaList, cache_get, cache_set, plugin
+from resources.framework import cache_get, cache_set, plugin
 
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p"
@@ -195,160 +196,13 @@ def map_episode(item, show_info, show_art):
 
 
 # ---------------------------------------------------------------------------
-# Row helpers
+# List helpers
 # ---------------------------------------------------------------------------
-def _total(data):
+def total(data):
+    """Total page count of a TMDB list response (for pagination)."""
     return int(data.get("total_pages", 1) or 1)
 
 
-def _content_for(media):
-    return "movies" if media == "movie" else "tvshows"
-
-
-def _movie_row(item, gmap):
-    info, art = map_movie(item, gmap=gmap)
-    if not info["title"]:
-        return None
-    return {"label": info["title"], "is_playable": True, "media_type": "movie",
-            "info": info, "art": art,
-            "url": plugin.get_url(route="play.movie", tmdb_id=info["tmdb"])}
-
-
-def _show_row(item, gmap):
-    info, art = map_show(item, gmap=gmap)
-    if not info["title"]:
-        return None
-    return {"label": info["title"], "is_folder": True, "media_type": "tvshow",
-            "info": info, "art": art,
-            "url": plugin.get_url(route="tmdb.seasons", tmdb_id=info["tmdb"])}
-
-
-def _media_rows(media, items):
-    gmap = genre_map(media)
-    build = _movie_row if media == "movie" else _show_row
-    return [r for r in (build(it, gmap) for it in items) if r]
-
-
-# ---------------------------------------------------------------------------
-# Media providers  (params, page) -> (rows, has_more)
-# ---------------------------------------------------------------------------
-@plugin.provider("tmdb.movies")
-def movies_list(params, page):
-    data = movies(params["category"], page=page)
-    return _media_rows("movie", data.get("results", [])), page < _total(data)
-
-
-@plugin.provider("tmdb.shows")
-def shows_list(params, page):
-    data = shows(params["category"], page=page)
-    return _media_rows("tv", data.get("results", [])), page < _total(data)
-
-
-@plugin.provider("tmdb.discover")
-def discover_list(params, page):
-    media = params.pop("media")          # remaining params are discover filters
-    data = discover(media, page=page, **params)
-    return _media_rows(media, data.get("results", [])), page < _total(data)
-
-
-@plugin.provider("tmdb.named")
-def named_list(params, page):
-    media, key = params["media"], params["key"]
-    disc = dict(NAMED.get((media, key), {}))
-    if key == "premieres":
-        disc["release_date.lte"] = date.today().isoformat()
-    data = discover(media, page=page, **disc)
-    return _media_rows(media, data.get("results", [])), page < _total(data)
-
-
-@plugin.provider("tmdb.search")
-def search_list(params, page):
-    media = params["media"]
-    data = search(media, params.get("query", ""), page=page)
-    return _media_rows(media, data.get("results", [])), page < _total(data)
-
-
-@plugin.provider("tmdb.episodes")
-def episode_list(params, page):
-    tmdb_id, season = params["tmdb_id"], int(params["season"])
-    show_title = params.get("show_title", "")
-    year, imdb = params.get("year", ""), params.get("imdb", "")
-    details = show_details(tmdb_id)
-    show_info, show_art = map_show(details, details=details)
-    show_info["imdb"] = imdb
-    data = season_details(tmdb_id, season)
-    rows = []
-    for ep in data.get("episodes", []):
-        epnum = ep.get("episode_number")
-        info, art = map_episode(ep, show_info, show_art)
-        rows.append({
-            "label": "{0}x{1:02d}. {2}".format(season, epnum or 0, info["title"]),
-            "is_playable": True, "media_type": "episode", "info": info, "art": art,
-            "url": plugin.get_url(route="play.episode", tmdb_id=tmdb_id, season=season,
-                                  episode=epnum, show_title=show_title, year=year, imdb=imdb),
-        })
-    return rows, False
-
-
-# ---------------------------------------------------------------------------
-# Dynamic folders  (params) -> [Node, ...]
-# ---------------------------------------------------------------------------
-@plugin.folder("tmdb.genres")
-def genre_folder(params):
-    media = params["media"]
-    return [MediaList(g["name"], "tmdb.discover", content=_content_for(media),
-                      icon="DefaultGenre.png",
-                      params={"media": media, "with_genres": g["id"]})
-            for g in genres(media)]
-
-
-@plugin.folder("tmdb.years")
-def year_folder(params):
-    media = params["media"]
-    field = "primary_release_year" if media == "movie" else "first_air_date_year"
-    return [MediaList(str(y), "tmdb.discover", content=_content_for(media),
-                      icon="DefaultYear.png", params={"media": media, field: y})
-            for y in range(date.today().year, 1969, -1)]
-
-
-@plugin.folder("tmdb.languages")
-def language_folder(params):
-    media = params["media"]
-    return [MediaList(name, "tmdb.discover", content=_content_for(media),
-                      icon="DefaultAddonLanguage.png",
-                      params={"media": media, "with_original_language": code})
-            for name, code in LANGUAGES]
-
-
-@plugin.folder("tmdb.networks")
-def network_folder(params):
-    return [MediaList(name, "tmdb.discover", content="tvshows",
-                      icon="DefaultStudios.png",
-                      params={"media": "tv", "with_networks": nid})
-            for name, nid in NETWORKS]
-
-
-@plugin.folder("tmdb.seasons")
-def season_folder(params):
-    tmdb_id = params["tmdb_id"]
-    details = show_details(tmdb_id)
-    show_info, show_art = map_show(details, details=details)
-    imdb = (details.get("external_ids") or {}).get("imdb_id", "")
-    nodes = []
-    for season in details.get("seasons", []):
-        num = season.get("season_number")
-        if num is None or num == 0:  # skip "Specials"
-            continue
-        info = dict(show_info)
-        info["season"] = num
-        info["plot"] = season.get("overview") or show_info.get("plot", "")
-        art = dict(show_art)
-        if season.get("poster_path"):
-            art["poster"] = art["thumb"] = "{0}/{1}{2}".format(
-                IMG, POSTER_SIZE, season["poster_path"])
-        nodes.append(MediaList(
-            "Season {0}".format(num), "tmdb.episodes", content="episodes",
-            info=info, art=art, media_type="season",
-            params={"tmdb_id": tmdb_id, "season": num, "show_title": show_info["title"],
-                    "year": show_info.get("year", ""), "imdb": imdb}))
-    return nodes
+def image(path, size=POSTER_SIZE):
+    """Absolute TMDB image URL for a poster/still path (or "" if missing)."""
+    return _img(path, size)

@@ -1,92 +1,40 @@
-"""Minimal Kodi plugin framework — declarative menu tree + a response cache.
+"""Minimal Kodi plugin framework — path-based routing + a response cache.
 
-Menus are built from four node types and the framework renders each one,
-owning all the Kodi chrome (URL building, pagination, content type, folder vs
-playable). Handlers never touch xbmcplugin/xbmcgui.
+The framework is generic: it knows about URLs, list items, and the Kodi chrome,
+but nothing about movies, episodes, or TMDB. You register handlers against URL
+paths and, inside them, render rows the framework turns into a directory.
 
-    Folder      opens a submenu — static `children`, or a `provider` returning nodes
-    MediaList   a list of movies/shows from a `provider` — auto-paginated
-    Search      prompts for input, then renders like a MediaList
-    Action      runs a `callback` (clear cache, open settings, play, ...)
+    @plugin.route("/movies/{category}")     # {name} -> a path segment
+    def movie_category(category):
+        plugin.finish(rows, content="movies")
 
-You register the tree and the dynamic bits, then run():
-
-    plugin.menu(MENU)                       # the Folder tree
-    @plugin.provider("tmdb.movies")         # MediaList/Search data: (params, page) -> (rows, more)
-    @plugin.folder("tmdb.genres")           # Folder children: (params) -> [Node, ...]
-    @plugin.callback("play.movie")          # Action: (params) -> None | plugin.resolve*()
+    plugin.url_for("/movies/trending")              # -> plugin://<id>/movies/trending
+    plugin.url_for("/play/movie/603", autoplay=1)   # leftover kwargs -> ?autoplay=1
     plugin.run()
 
-Routing is by the `route` query param: a static menu id, or a provider/callback
-name. The handle + params are read fresh each navigation, so they stay correct
-across reuseLanguageInvoker re-runs.
+Routing is by the URL path (read from sys.argv[0]); the handle, query params,
+and page are read fresh each navigation, so they stay correct across
+reuseLanguageInvoker re-runs. Handlers build their own listings (typically via
+the addon's List/Item classes) and call plugin.finish() / plugin.resolve().
 
-Media rows (what a provider returns) are plain dicts:
+A rendered row is a plain dict the framework knows how to turn into a ListItem:
     label, url, is_folder, is_playable, icon, thumb/poster/fanart/...,
     art, info (title/plot/year/...), media_type, properties, context_menu.
 """
 import functools
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import xbmc
 import xbmcaddon
 import xbmcgui
 import xbmcplugin
 import xbmcvfs
-
-
-# ===========================================================================
-# Menu node types
-# ===========================================================================
-class _Node:
-    def __init__(self, label, icon=None, params=None, info=None, art=None,
-                 media_type=None):
-        self.label = label
-        self.icon = icon
-        self.params = params or {}
-        self.info = info
-        self.art = art
-        self.media_type = media_type
-
-
-class Folder(_Node):
-    """Opens a submenu — static `children`, or a `provider` that returns nodes."""
-    def __init__(self, label, children=None, provider=None, **kw):
-        super().__init__(label, **kw)
-        self.children = list(children) if children else []
-        self.provider = provider
-
-
-class MediaList(_Node):
-    """A list of movies/shows from `provider` — auto-paginated, content-typed."""
-    def __init__(self, label, provider, content="movies", **kw):
-        super().__init__(label, **kw)
-        self.provider = provider
-        self.content = content
-
-
-class Search(_Node):
-    """Prompts for a query, then renders like a MediaList from `provider`."""
-    def __init__(self, label, provider, content="movies", **kw):
-        super().__init__(label, **kw)
-        self.provider = provider
-        self.content = content
-
-
-class Action(_Node):
-    """Runs `callback` (clear cache, open settings, play, ...)."""
-    def __init__(self, label, callback, **kw):
-        super().__init__(label, **kw)
-        self.callback = callback
-
-
-def _slug(label):
-    return "".join(c.lower() if c.isalnum() else "-" for c in label).strip("-")
 
 
 # ===========================================================================
@@ -209,34 +157,24 @@ def _apply_info(li, info, media_type):
         tag.setUniqueID(str(info["tmdb"]), "tmdb")
 
 
+def _compile(pattern):
+    """Turn a route pattern ("/movies/{category}") into an anchored regex."""
+    regex = re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", pattern)
+    return re.compile("^" + regex + "$")
+
+
 class Plugin:
-    """A Kodi plugin: register a menu tree + providers/callbacks, then run()."""
+    """A Kodi plugin: register route handlers, then run()."""
 
     def __init__(self, addon_id=None):
         self._addon = xbmcaddon.Addon(addon_id) if addon_id else xbmcaddon.Addon()
         self.id = self._addon.getAddonInfo("id")
         self.name = self._addon.getAddonInfo("name")
         self.icon = self._addon.getAddonInfo("icon")
-        self._menus = {}       # route id -> Folder (static children)
-        self._providers = {}   # name -> (params, page) -> (rows, has_more)
-        self._folders = {}     # name -> (params) -> [Node, ...]
-        self._callbacks = {}   # name -> (params) -> None | resolve sentinel
-        self._root_route = "root"
+        self._routes = []     # [(compiled_regex, handler), ...] in registration order
         self.handle = -1
-        self.params = {}
-        self._register_builtins()
-
-    def _register_builtins(self):
-        """Default Action callbacks every addon gets: `settings` + `clear_cache`."""
-        def settings(params):
-            self.open_settings()
-
-        def clear_cache(params):
-            self.clear_cache()
-            self.notify("Cache cleared")
-
-        self._callbacks["settings"] = settings
-        self._callbacks["clear_cache"] = clear_cache
+        self.params = {}      # query params (minus `page`) for this navigation
+        self.page = 1
 
     # -- logging / notifications --------------------------------------------
     def log(self, msg, level=xbmc.LOGINFO):
@@ -251,11 +189,11 @@ class Plugin:
         )
 
     # -- URLs ----------------------------------------------------------------
-    def get_url(self, **kwargs):
-        """Build a plugin:// callback URL from query params."""
-        query = {k: v for k, v in kwargs.items() if v is not None}
-        base = "plugin://{0}/".format(self.id)
-        return base + "?" + urlencode(query) if query else base
+    def url_for(self, path, **query):
+        """Build a plugin:// URL from a literal route path + optional query."""
+        base = "plugin://{0}{1}".format(self.id, path)
+        q = {k: v for k, v in query.items() if v is not None}
+        return base + "?" + urlencode(q) if q else base
 
     # -- settings (read off this navigation's Addon — always fresh) ----------
     def get_setting(self, key, default=""):
@@ -298,7 +236,7 @@ class Plugin:
     def clear_cache(self):
         cache_clear()
 
-    # -- dialogs / playback --------------------------------------------------
+    # -- dialogs -------------------------------------------------------------
     def keyboard(self, heading=""):
         """Prompt for text; returns "" if cancelled."""
         return xbmcgui.Dialog().input(heading) or ""
@@ -306,120 +244,45 @@ class Plugin:
     def open_settings(self):
         self._addon.openSettings()
 
-    def resolve(self, url):
-        """From a play callback: hand Kodi a playable URL."""
-        return {"__resolve__": True, "url": url}
-
-    def resolve_fail(self):
-        """From a play callback: signal the stream couldn't be resolved."""
-        return {"__resolve__": True, "url": None}
-
     # -- registration --------------------------------------------------------
-    def menu(self, root, route="root"):
-        """Register the menu tree; indexes static folders so they're routable."""
-        self._root_route = route
-        self._index_menu(root, route)
-
-    def _index_menu(self, folder, route):
-        folder._route = route
-        self._menus[route] = folder
-        for child in folder.children:
-            if isinstance(child, Folder) and not child.provider:
-                self._index_menu(child, route + "/" + _slug(child.label))
-
-    def provider(self, name):
-        """Register a MediaList/Search data source: (params, page) -> (rows, more)."""
-        def d(func):
-            self._providers[name] = func
+    def route(self, pattern):
+        """Register a handler for a URL path pattern (segments use {name})."""
+        def decorator(func):
+            self._routes.append((_compile(pattern), func))
             return func
-        return d
-
-    def folder(self, name):
-        """Register a dynamic Folder's children: (params) -> [Node, ...]."""
-        def d(func):
-            self._folders[name] = func
-            return func
-        return d
-
-    def callback(self, name):
-        """Register an Action/play handler: (params) -> None | resolve*()."""
-        def d(func):
-            self._callbacks[name] = func
-            return func
-        return d
+        return decorator
 
     # -- run loop ------------------------------------------------------------
-    def run(self, default=None):
-        """Parse argv, resolve the route, render it."""
+    def run(self):
+        """Parse argv, match the path to a route, and dispatch."""
         # Rebuild the Addon each navigation so settings reads stay fresh even
         # when `plugin` is a long-lived module singleton under reuseLanguageInvoker.
         self._addon = xbmcaddon.Addon()
         self.handle = int(sys.argv[1]) if len(sys.argv) > 1 else -1
-        params = dict(parse_qsl(sys.argv[2][1:])) if len(sys.argv) > 2 else {}
-        route = params.pop("route", default or self._root_route)
-        content = params.pop("content", "")
-        page = int(params.pop("page", 1) or 1)
-        prompt = params.pop("prompt", None)
-        self.params = params
+        self.params = dict(parse_qsl(sys.argv[2][1:])) if len(sys.argv) > 2 else {}
+        self.page = int(self.params.pop("page", 1) or 1)
+        path = urlsplit(sys.argv[0]).path or "/"
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
         try:
-            self._route(route, content, page, prompt)
+            self._dispatch(path)
         except Exception as exc:  # noqa: BLE001 — never surface a raw traceback
-            self.log_error("route '{0}' failed: {1}".format(route, exc))
+            self.log_error("route '{0}' failed: {1}".format(path, exc))
             self.notify("Something went wrong")
             xbmcplugin.endOfDirectory(self.handle, succeeded=False)
 
-    def _route(self, route, content, page, prompt):
-        if route in self._menus:                      # static submenu
-            return self._render_nodes(self._menus[route].children)
-        if route in self._folders:                    # dynamic submenu
-            return self._render_nodes(self._folders[route](dict(self.params)) or [])
-        if route in self._providers:                  # media list (+ search)
-            if prompt and not self.params.get("query"):
-                query = self.keyboard("Search")
-                if not query:
-                    return xbmcplugin.endOfDirectory(self.handle, succeeded=False)
-                self.params["query"] = query
-            rows, has_more = self._providers[route](dict(self.params), page)
-            rows = list(rows)
-            if has_more:
-                nxt = dict(self.params)
-                nxt.update(route=route, content=content, page=page + 1)
-                rows.append({"label": "Next Page >>", "icon": self.icon,
-                             "is_folder": True, "url": self.get_url(**nxt)})
-            return self._render(rows, content=content or "videos")
-        if route in self._callbacks:                  # action / play
-            result = self._callbacks[route](dict(self.params))
-            if isinstance(result, dict) and result.get("__resolve__"):
-                return self._resolve(result.get("url"))
-            return xbmcplugin.endOfDirectory(self.handle, succeeded=False)
-        self.log_error("unknown route: {0}".format(route))
+    def _dispatch(self, path):
+        for regex, handler in self._routes:
+            match = regex.match(path)
+            if match:
+                return handler(**match.groupdict())
+        self.log_error("no route for: {0}".format(path))
         self.notify("Something went wrong")
         xbmcplugin.endOfDirectory(self.handle, succeeded=False)
 
     # -- rendering -----------------------------------------------------------
-    def _node_url(self, node):
-        if isinstance(node, MediaList):
-            return self.get_url(route=node.provider, content=node.content, **node.params)
-        if isinstance(node, Search):
-            return self.get_url(route=node.provider, content=node.content,
-                                prompt=1, **node.params)
-        if isinstance(node, Action):
-            return self.get_url(route=node.callback, **node.params)
-        if isinstance(node, Folder):
-            if node.provider:
-                return self.get_url(route=node.provider, **node.params)
-            return self.get_url(route=node._route)
-        raise TypeError("unknown node type: {0!r}".format(node))
-
-    def _render_nodes(self, nodes):
-        items = [{
-            "label": node.label, "icon": node.icon, "is_folder": True,
-            "url": self._node_url(node), "info": node.info, "art": node.art,
-            "media_type": node.media_type or "video",
-        } for node in nodes]
-        self._render(items, content="")
-
-    def _render(self, items, content="videos"):
+    def finish(self, items, content="", succeeded=True):
+        """Render `items` (row dicts) as this navigation's directory listing."""
         rows = [(it.get("url", ""), self._make_listitem(it), it.get("is_folder", False))
                 for it in items]
         if rows:
@@ -427,13 +290,22 @@ class Plugin:
         if content:
             xbmcplugin.setContent(self.handle, content)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
-        xbmcplugin.endOfDirectory(self.handle, succeeded=True)
+        xbmcplugin.endOfDirectory(self.handle, succeeded=succeeded)
 
-    def _resolve(self, url):
+    def cancel(self):
+        """End this navigation without a listing (cancelled action/search)."""
+        xbmcplugin.endOfDirectory(self.handle, succeeded=False)
+
+    def resolve(self, url):
+        """Hand Kodi a playable URL (or fail the resolve if `url` is falsy)."""
         if url:
             xbmcplugin.setResolvedUrl(self.handle, True, xbmcgui.ListItem(path=url))
         else:
             xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
+
+    def resolve_fail(self):
+        """Signal the stream couldn't be resolved."""
+        self.resolve(None)
 
     def _make_listitem(self, item):
         li = xbmcgui.ListItem(label=item.get("label", ""))
@@ -462,6 +334,6 @@ class Plugin:
         return li
 
 
-# The shared singleton — addon.py and every provider module import this one
+# The shared singleton — addon.py and every route module import this one
 # instance. Plugin() auto-detects the running add-on, so this stays reusable.
 plugin = Plugin()

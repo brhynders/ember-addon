@@ -1,18 +1,18 @@
-"""Playback callbacks — placeholders until scraping/resolving is wired up.
+"""Playback routes — placeholders until scraping/resolving is wired up.
 
-A media row's `play.*` route lands here; for now we just report that playback
+A media row's `/play/...` URL lands here; for now we just report that playback
 isn't ready and fail the resolve cleanly.
 """
 from resources.framework import plugin
 
 
-@plugin.callback("play.movie")
-def play_movie(params):
+@plugin.route("/play/movie/{id}")
+def play_movie(id):
     plugin.notify("Playback isn't wired up yet")
-    return plugin.resolve_fail()
+    plugin.resolve_fail()
 
 
-@plugin.callback("play.episode")
-def play_episode(params):
+@plugin.route("/play/episode/{id}/{season}/{episode}")
+def play_episode(id, season, episode):
     plugin.notify("Playback isn't wired up yet")
-    return plugin.resolve_fail()
+    plugin.resolve_fail()
