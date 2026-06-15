@@ -7,6 +7,3 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# NOTE: dist/ and ember.repository.zip are build outputs but are intentionally
-# committed — GitHub Pages serves them as the live Kodi repository.
