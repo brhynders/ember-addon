@@ -377,7 +377,9 @@ class Item:
         return []
 
     def listitem(self):
-        li = xbmcgui.ListItem(label=self.label)
+        # offscreen=True builds a lightweight data item (no per-item GUI locking),
+        # which is the key speedup for rendering a directory of many items.
+        li = xbmcgui.ListItem(label=self.label, offscreen=True)
         art = {}
         if self.icon:
             art["icon"] = art["thumb"] = self.icon
