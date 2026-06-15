@@ -121,7 +121,7 @@ def season_details(tmdb_id, season_number):
 
 
 # ---------------------------------------------------------------------------
-# Mappers — output only keys the framework's _apply_info consumes
+# Mappers — output only keys the ui module's _apply_info consumes
 # ---------------------------------------------------------------------------
 def _img(path, size):
     return "{0}/{1}{2}".format(IMG, size, path) if path else ""

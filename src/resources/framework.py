@@ -1,12 +1,13 @@
 """Minimal Kodi plugin framework — path-based routing + a response cache.
 
-The framework is generic: it knows about URLs, list items, and the Kodi chrome,
-but nothing about movies, episodes, or TMDB. You register handlers against URL
-paths and, inside them, render rows the framework turns into a directory.
+The framework is generic: it knows about URLs and the run loop, but nothing
+about movies, episodes, TMDB, or how a listing is rendered. You register
+handlers against URL paths; each handler builds its own listing (via the
+addon's List/Item classes) and renders it.
 
     @plugin.route("/movies/{category}")     # {name} -> a path segment
     def movie_category(category):
-        plugin.finish(rows, content="movies")
+        Movies(...).render()                # rendering lives in the addon
 
     plugin.url_for("/movies/trending")              # -> plugin://<id>/movies/trending
     plugin.url_for("/play/movie/603", autoplay=1)   # leftover kwargs -> ?autoplay=1
@@ -14,12 +15,10 @@ paths and, inside them, render rows the framework turns into a directory.
 
 Routing is by the URL path (read from sys.argv[0]); the handle, query params,
 and page are read fresh each navigation, so they stay correct across
-reuseLanguageInvoker re-runs. Handlers build their own listings (typically via
-the addon's List/Item classes) and call plugin.finish() / plugin.resolve().
-
-A rendered row is a plain dict the framework knows how to turn into a ListItem:
-    label, url, is_folder, is_playable, icon, thumb/poster/fanart/...,
-    art, info (title/plot/year/...), media_type, properties, context_menu.
+reuseLanguageInvoker re-runs. The framework owns no rendering: handlers build
+their listings with the addon's List/Item classes (which call xbmcplugin
+themselves) and read `plugin.handle` for playback resolution. The framework
+only ends a directory itself when a dispatch fails, so Kodi doesn't hang.
 """
 import functools
 import json
@@ -110,51 +109,6 @@ def cache_clear():
         conn.commit()
     finally:
         conn.close()
-
-
-def _apply_info(li, info, media_type):
-    """Apply a metadata dict via the InfoTagVideo API (setInfo is deprecated)."""
-    tag = li.getVideoInfoTag()
-    tag.setMediaType(media_type)
-    if info.get("title"):
-        tag.setTitle(info["title"])
-    if info.get("plot"):
-        tag.setPlot(info["plot"])
-    if info.get("genres"):
-        tag.setGenres(info["genres"])
-    if info.get("premiered"):
-        tag.setPremiered(info["premiered"])
-    if info.get("tvshowtitle"):
-        tag.setTvShowTitle(info["tvshowtitle"])
-    if info.get("year"):
-        try:
-            tag.setYear(int(info["year"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("rating"):
-        try:
-            tag.setRating(float(info["rating"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("duration"):
-        try:
-            tag.setDuration(int(info["duration"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("season") is not None:
-        try:
-            tag.setSeason(int(info["season"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("episode") is not None:
-        try:
-            tag.setEpisode(int(info["episode"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("imdb"):
-        tag.setUniqueID(info["imdb"], "imdb")
-    if info.get("tmdb"):
-        tag.setUniqueID(str(info["tmdb"]), "tmdb")
 
 
 def _compile(pattern):
@@ -279,59 +233,6 @@ class Plugin:
         self.log_error("no route for: {0}".format(path))
         self.notify("Something went wrong")
         xbmcplugin.endOfDirectory(self.handle, succeeded=False)
-
-    # -- rendering -----------------------------------------------------------
-    def finish(self, items, content="", succeeded=True):
-        """Render `items` (row dicts) as this navigation's directory listing."""
-        rows = [(it.get("url", ""), self._make_listitem(it), it.get("is_folder", False))
-                for it in items]
-        if rows:
-            xbmcplugin.addDirectoryItems(self.handle, rows, len(rows))
-        if content:
-            xbmcplugin.setContent(self.handle, content)
-        xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
-        xbmcplugin.endOfDirectory(self.handle, succeeded=succeeded)
-
-    def cancel(self):
-        """End this navigation without a listing (cancelled action/search)."""
-        xbmcplugin.endOfDirectory(self.handle, succeeded=False)
-
-    def resolve(self, url):
-        """Hand Kodi a playable URL (or fail the resolve if `url` is falsy)."""
-        if url:
-            xbmcplugin.setResolvedUrl(self.handle, True, xbmcgui.ListItem(path=url))
-        else:
-            xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
-
-    def resolve_fail(self):
-        """Signal the stream couldn't be resolved."""
-        self.resolve(None)
-
-    def _make_listitem(self, item):
-        li = xbmcgui.ListItem(label=item.get("label", ""))
-
-        art = {}
-        if item.get("icon"):
-            art["icon"] = art["thumb"] = item["icon"]
-        for slot in ("thumb", "poster", "fanart", "banner", "clearlogo"):
-            if item.get(slot):
-                art[slot] = item[slot]
-        if item.get("art"):
-            art.update(item["art"])
-        if art:
-            li.setArt(art)
-
-        if item.get("info"):
-            _apply_info(li, item["info"], item.get("media_type", "video"))
-        if item.get("is_playable"):
-            li.setProperty("IsPlayable", "true")
-        for key, value in (item.get("properties") or {}).items():
-            li.setProperty(key, str(value))
-        for stream_type, details in (item.get("stream_info") or {}).items():
-            li.addStreamInfo(stream_type, details)
-        if item.get("context_menu"):
-            li.addContextMenuItems(item["context_menu"])
-        return li
 
 
 # The shared singleton — addon.py and every route module import this one

@@ -9,7 +9,7 @@ from datetime import date
 
 from resources import playback, tmdb  # noqa: F401 — playback import registers routes
 from resources.framework import plugin
-from resources.ui import Directory, Episode, Episodes, Menu, Movie, Movies, Show, Shows
+from resources.ui import Directory, Episode, Episodes, Menu, Movie, Movies, Show, Shows, cancel
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ def discover_list(media):
 def search_list(media):
     query = plugin.params.get("query") or plugin.keyboard("Search")
     if not query:
-        return plugin.cancel()
+        return cancel()
     data = tmdb.search(media, query, page=plugin.page)
     more = plugin.url_for("/search/{0}".format(media), query=query, page=plugin.page + 1)
     _media_list(media, data, more).render()
@@ -204,14 +204,14 @@ def episodes_list(id, season):
 @plugin.route("/settings")
 def settings():
     plugin.open_settings()
-    plugin.cancel()
+    cancel()
 
 
 @plugin.route("/clear-cache")
 def clear_cache():
     plugin.clear_cache()
     plugin.notify("Cache cleared")
-    plugin.cancel()
+    cancel()
 
 
 if __name__ == "__main__":
