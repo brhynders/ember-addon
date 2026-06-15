@@ -137,11 +137,14 @@ def open_settings():
 # read. A fresh connection per call keeps it safe across Kodi's nav threads.
 # ===========================================================================
 class Cache:
-    """A TTL key/value store. One instance owns the DB path; a connection is
-    opened per call, so it's safe across Kodi's navigation threads."""
+    """A TTL key/value store. A connection is opened per call (safe across Kodi's
+    navigation threads). The schema is ensured once per process, and connections
+    run with journaling/sync off and autocommit — it's a disposable cache, so we
+    trade durability for fast, fsync-free writes."""
 
     def __init__(self):
         self._db = None
+        self._ready = False     # has the table been ensured this process?
 
     def _conn(self):
         if self._db is None:
@@ -151,11 +154,15 @@ class Cache:
             except OSError:
                 pass
             self._db = os.path.join(profile, "cache.db")
-        conn = sqlite3.connect(self._db, timeout=5)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS cache "
-            "(key TEXT PRIMARY KEY, value TEXT, expiry REAL)"
-        )
+        conn = sqlite3.connect(self._db, timeout=5, isolation_level=None)
+        conn.execute("PRAGMA synchronous=OFF")
+        conn.execute("PRAGMA journal_mode=OFF")
+        if not self._ready:     # create the table once, not on every call
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS cache "
+                "(key TEXT PRIMARY KEY, value TEXT, expiry REAL)"
+            )
+            self._ready = True
         return conn
 
     def get(self, key):
@@ -170,7 +177,6 @@ class Cache:
             value, expiry = row
             if expiry <= time.time():
                 conn.execute("DELETE FROM cache WHERE key = ?", (key,))
-                conn.commit()
                 return None
             return json.loads(value)
         finally:
@@ -189,7 +195,6 @@ class Cache:
                 "INSERT OR REPLACE INTO cache (key, value, expiry) VALUES (?, ?, ?)",
                 (key, blob, expiry),
             )
-            conn.commit()
         finally:
             conn.close()
 
@@ -198,7 +203,6 @@ class Cache:
         conn = self._conn()
         try:
             conn.execute("DELETE FROM cache")
-            conn.commit()
         finally:
             conn.close()
 
