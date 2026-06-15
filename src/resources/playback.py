@@ -3,7 +3,7 @@
 A media row's `play.*` route lands here; for now we just report that playback
 isn't ready and fail the resolve cleanly.
 """
-from resources.plugin import plugin
+from resources.framework import plugin
 
 
 @plugin.callback("play.movie")

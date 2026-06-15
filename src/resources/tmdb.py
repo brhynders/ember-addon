@@ -10,8 +10,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from resources.framework import MediaList, cache_get, cache_set
-from resources.plugin import plugin
+from resources.framework import MediaList, cache_get, cache_set, plugin
 
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p"

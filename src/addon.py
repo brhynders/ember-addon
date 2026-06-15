@@ -5,8 +5,7 @@ here registers their routes on the shared plugin. addon.py only describes the
 navigation (the MENU tree) and runs.
 """
 from resources import playback, tmdb  # noqa: F401 — imports register the routes
-from resources.framework import Action, Folder, MediaList, Search
-from resources.plugin import plugin
+from resources.framework import Action, Folder, MediaList, Search, plugin
 
 MENU = Folder("Home", children=[
     Folder("Movies", icon="DefaultMovies.png", children=[

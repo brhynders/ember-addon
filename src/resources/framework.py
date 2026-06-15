@@ -460,3 +460,8 @@ class Plugin:
         if item.get("context_menu"):
             li.addContextMenuItems(item["context_menu"])
         return li
+
+
+# The shared singleton — addon.py and every provider module import this one
+# instance. Plugin() auto-detects the running add-on, so this stays reusable.
+plugin = Plugin()
