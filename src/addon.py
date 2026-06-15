@@ -42,39 +42,75 @@ def home():
     ]).render()
 
 
+# Browse menus. Each row is (label, route, icon); a route of None is a
+# placeholder that points at /coming-soon (the feature isn't built yet).
+_MOVIE_MENU = [
+    ("Search", "/search/movie", "DefaultAddonsSearch.png"),
+    ("In Progress", None, "DefaultInProgressShows.png"),
+    ("Movie Watchlist", None, "DefaultPlaylist.png"),
+    ("Because You Watched", None, "DefaultMovies.png"),
+    ("Trakt Recommended", None, "DefaultAddonInfoProvider.png"),
+    ("Random Because You Watched", None, "DefaultMovies.png"),
+    ("Trending Recently", "/list/movie/trending", "DefaultRecentlyAddedMovies.png"),
+    ("Premieres", "/named/movie/premieres", "DefaultRecentlyAddedMovies.png"),
+    ("Latest Releases", "/named/movie/latest_releases", "DefaultRecentlyAddedMovies.png"),
+    ("Most Watched", None, "DefaultMusicTop100.png"),
+    ("Most Favorited", "/named/movie/most_voted", "DefaultFavourites.png"),
+    ("Top 10 Box Office", None, "DefaultMusicTop100.png"),
+    ("Blockbusters", "/named/movie/blockbusters", "DefaultMovies.png"),
+    ("In Theaters", "/list/movie/now_playing", "DefaultInProgressShows.png"),
+    ("Up Coming", "/list/movie/upcoming", "DefaultYear.png"),
+    ("Oscar Winners", None, "DefaultMusicTop100.png"),
+    ("Genres", "/genres/movie", "DefaultGenre.png"),
+    ("Providers", "/providers/movie", "DefaultStudios.png"),
+    ("Languages", "/languages/movie", "DefaultAddonLanguage.png"),
+    ("Years", "/years/movie", "DefaultYear.png"),
+    ("Decades", "/decades/movie", "DefaultYear.png"),
+    ("Certifications", "/certifications/movie", "DefaultGenre.png"),
+]
+
+_TV_MENU = [
+    ("Search", "/search/tv", "DefaultAddonsSearch.png"),
+    ("In Progress", None, "DefaultInProgressShows.png"),
+    ("In Progress Episodes", None, "DefaultInProgressShows.png"),
+    ("TV Shows Watchlist", None, "DefaultPlaylist.png"),
+    ("Because You Watched", None, "DefaultTVShows.png"),
+    ("Trakt Recommended", None, "DefaultAddonInfoProvider.png"),
+    ("Random Because You Watched", None, "DefaultTVShows.png"),
+    ("Trending Recently", "/list/tv/trending", "DefaultRecentlyAddedMovies.png"),
+    ("Premieres", "/named/tv/premieres", "DefaultRecentlyAddedMovies.png"),
+    ("Most Watched", None, "DefaultMusicTop100.png"),
+    ("Most Favorited", "/named/tv/most_voted", "DefaultFavourites.png"),
+    ("Airing Today", "/list/tv/airing_today", "DefaultInProgressShows.png"),
+    ("On The Air", "/list/tv/on_the_air", "DefaultInProgressShows.png"),
+    ("Up Coming", "/named/tv/upcoming", "DefaultYear.png"),
+    ("Genres", "/genres/tv", "DefaultGenre.png"),
+    ("Providers", "/providers/tv", "DefaultStudios.png"),
+    ("Networks", "/networks", "DefaultStudios.png"),
+    ("Languages", "/languages/tv", "DefaultAddonLanguage.png"),
+    ("Years", "/years/tv", "DefaultYear.png"),
+    ("Decades", "/decades/tv", "DefaultYear.png"),
+    ("Certifications", None, "DefaultGenre.png"),  # tmdb tv discover can't filter certs
+]
+
+
+def _menu(rows):
+    """Build MenuItems from a browse table; route=None -> a coming-soon stub."""
+    return [MenuItem(label,
+                     router.url_for(route) if route
+                     else router.url_for("/coming-soon", feature=label),
+                     icon=icon)
+            for label, route, icon in rows]
+
+
 @router.route("/movies")
 def movies_menu():
-    Menu([
-        MenuItem("Search", router.url_for("/search/movie"), icon="DefaultAddonsSearch.png"),
-        MenuItem("Trending", router.url_for("/list/movie/trending"), icon="DefaultRecentlyAddedMovies.png"),
-        MenuItem("Popular", router.url_for("/list/movie/popular"), icon="DefaultFavourites.png"),
-        MenuItem("In Theaters", router.url_for("/list/movie/now_playing"), icon="DefaultInProgressShows.png"),
-        MenuItem("Top Rated", router.url_for("/list/movie/top_rated"), icon="DefaultMusicTop100.png"),
-        MenuItem("Upcoming", router.url_for("/list/movie/upcoming"), icon="DefaultYear.png"),
-        MenuItem("Premieres", router.url_for("/named/movie/premieres"), icon="DefaultRecentlyAddedMovies.png"),
-        MenuItem("Most Voted", router.url_for("/named/movie/most_voted"), icon="DefaultMusicTop100.png"),
-        MenuItem("Blockbusters", router.url_for("/named/movie/blockbusters"), icon="DefaultMovies.png"),
-        MenuItem("Genres", router.url_for("/genres/movie"), icon="DefaultGenre.png"),
-        MenuItem("Years", router.url_for("/years/movie"), icon="DefaultYear.png"),
-        MenuItem("Languages", router.url_for("/languages/movie"), icon="DefaultAddonLanguage.png"),
-    ]).render()
+    Menu(_menu(_MOVIE_MENU)).render()
 
 
 @router.route("/tv")
 def tv_menu():
-    Menu([
-        MenuItem("Search", router.url_for("/search/tv"), icon="DefaultAddonsSearch.png"),
-        MenuItem("Trending", router.url_for("/list/tv/trending"), icon="DefaultRecentlyAddedMovies.png"),
-        MenuItem("Popular", router.url_for("/list/tv/popular"), icon="DefaultFavourites.png"),
-        MenuItem("On The Air", router.url_for("/list/tv/on_the_air"), icon="DefaultInProgressShows.png"),
-        MenuItem("Airing Today", router.url_for("/list/tv/airing_today"), icon="DefaultInProgressShows.png"),
-        MenuItem("Top Rated", router.url_for("/list/tv/top_rated"), icon="DefaultMusicTop100.png"),
-        MenuItem("Most Voted", router.url_for("/named/tv/most_voted"), icon="DefaultMusicTop100.png"),
-        MenuItem("Genres", router.url_for("/genres/tv"), icon="DefaultGenre.png"),
-        MenuItem("Networks", router.url_for("/networks"), icon="DefaultStudios.png"),
-        MenuItem("Years", router.url_for("/years/tv"), icon="DefaultYear.png"),
-        MenuItem("Languages", router.url_for("/languages/tv"), icon="DefaultAddonLanguage.png"),
-    ]).render()
+    Menu(_menu(_TV_MENU)).render()
 
 
 @router.route("/tools")
@@ -97,10 +133,7 @@ def category_list(media, category):
 
 @router.route("/named/{media}/{key}")
 def named_list(media, key):
-    disc = dict(tmdb.NAMED.get((media, key), {}))
-    if key == "premieres":
-        disc["release_date.lte"] = date.today().isoformat()
-    data = tmdb.discover(media, page=router.page, **disc)
+    data = tmdb.discover(media, page=router.page, **tmdb.named_params(media, key))
     more = router.url_for("/named/{0}/{1}".format(media, key), page=router.page + 1)
     _media_list(media, data, more).render()
 
@@ -153,6 +186,36 @@ def networks_menu():
     Menu(MenuItem(name, router.url_for("/discover/tv", with_networks=nid),
                    icon="DefaultStudios.png")
          for name, nid in tmdb.NETWORKS).render()
+
+
+@router.route("/providers/{media}")
+def providers_menu(media):
+    Menu(MenuItem(name, router.url_for("/discover/{0}".format(media),
+                                       with_watch_providers=pid, watch_region="US"),
+                  icon="DefaultStudios.png")
+         for name, pid in tmdb.PROVIDERS).render()
+
+
+@router.route("/decades/{media}")
+def decades_menu(media):
+    gte, lte = (("primary_release_date.gte", "primary_release_date.lte")
+                if media == "movie"
+                else ("first_air_date.gte", "first_air_date.lte"))
+    start = (date.today().year // 10) * 10
+    Menu(MenuItem("{0}s".format(d),
+                  router.url_for("/discover/{0}".format(media),
+                                 **{gte: "{0}-01-01".format(d),
+                                    lte: "{0}-12-31".format(d + 9)}),
+                  icon="DefaultYear.png")
+         for d in range(start, 1899, -10)).render()
+
+
+@router.route("/certifications/{media}")
+def certifications_menu(media):
+    Menu(MenuItem(cert, router.url_for("/discover/{0}".format(media),
+                                       certification_country="US", certification=cert),
+                  icon="DefaultGenre.png")
+         for cert in tmdb.CERTIFICATIONS).render()
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +275,15 @@ def play_movie(id):
 def play_episode(id, season, episode):
     notify("Playback isn't wired up yet")
     playback.resolve(None)
+
+
+# ---------------------------------------------------------------------------
+# Placeholders — menu entries for features not built yet
+# ---------------------------------------------------------------------------
+@router.route("/coming-soon")
+def coming_soon():
+    notify("{0}: coming soon".format(router.params.get("feature", "This feature")))
+    cancel()
 
 
 # ---------------------------------------------------------------------------

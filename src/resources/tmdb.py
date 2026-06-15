@@ -7,6 +7,7 @@ and UI classes (ui.py) consume these; nothing here touches Kodi listings.
 Uses stdlib urllib (no 'requests'); responses go through the framework cache.
 """
 import json
+from datetime import date
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -25,7 +26,6 @@ STILL_SIZE = "w780"
 # cache TTLs (minutes)
 TTL_LIST = 8 * 60
 TTL_DETAIL = 7 * 24 * 60
-TTL_GENRE = 30 * 24 * 60
 
 LANGUAGES = [("English", "en"), ("Spanish", "es"), ("French", "fr"),
              ("Japanese", "ja"), ("Korean", "ko"), ("German", "de"),
@@ -38,14 +38,62 @@ NETWORKS = [("Netflix", 213), ("HBO / Max", 49), ("Disney+", 2739),
             ("Peacock", 3353), ("FX", 88), ("Showtime", 67), ("NBC", 6),
             ("ABC", 2), ("The CW", 71), ("Adult Swim", 80)]
 
-# Named TMDB-discover lists (FenLight-style browse rows).
+# TMDB genre ids are stable, so the genre tables are hardcoded — this also keeps
+# genre_map() (used to label every row) from making an API call.
+GENRES = {
+    "movie": [
+        (28, "Action"), (12, "Adventure"), (16, "Animation"), (35, "Comedy"),
+        (80, "Crime"), (99, "Documentary"), (18, "Drama"), (10751, "Family"),
+        (14, "Fantasy"), (36, "History"), (27, "Horror"), (10402, "Music"),
+        (9648, "Mystery"), (10749, "Romance"), (878, "Science Fiction"),
+        (10770, "TV Movie"), (53, "Thriller"), (10752, "War"), (37, "Western"),
+    ],
+    "tv": [
+        (10759, "Action & Adventure"), (16, "Animation"), (35, "Comedy"),
+        (80, "Crime"), (99, "Documentary"), (18, "Drama"), (10751, "Family"),
+        (10762, "Kids"), (9648, "Mystery"), (10763, "News"), (10764, "Reality"),
+        (10765, "Sci-Fi & Fantasy"), (10766, "Soap"), (10767, "Talk"),
+        (10768, "War & Politics"), (37, "Western"),
+    ],
+}
+
+# Major US streaming providers (TMDB watch-provider ids; global — the same ids
+# work for both movie and tv discover). Curated, not fetched.
+PROVIDERS = [("Netflix", 8), ("Amazon Prime Video", 9), ("Disney+", 337),
+             ("Max", 1899), ("Hulu", 15), ("Apple TV+", 350),
+             ("Paramount+", 2303), ("Peacock", 386), ("Starz", 43),
+             ("AMC+", 526), ("Crunchyroll", 283), ("MGM+", 34), ("Tubi", 73),
+             ("Pluto TV", 300), ("The CW", 83)]
+
+# US movie certifications, in display order. (TMDB's tv discover can't filter by
+# certification, so there's no tv equivalent.)
+CERTIFICATIONS = ["G", "PG", "PG-13", "R", "NC-17"]
+
+# Named TMDB-discover lists (FenLight-style browse rows). A "@today" value is
+# replaced with today's date at request time (see named_params).
 NAMED = {
     ("movie", "most_voted"): {"sort_by": "vote_count.desc"},
     ("movie", "blockbusters"): {"sort_by": "revenue.desc"},
     ("movie", "premieres"): {"sort_by": "primary_release_date.desc",
-                             "with_release_type": "4|6", "region": "US"},
+                             "with_release_type": "4|6", "region": "US",
+                             "release_date.lte": "@today"},
+    ("movie", "latest_releases"): {"sort_by": "primary_release_date.desc",
+                                   "with_release_type": "3", "region": "US",
+                                   "release_date.lte": "@today",
+                                   "vote_count.gte": "10"},
     ("tv", "most_voted"): {"sort_by": "vote_count.desc"},
+    ("tv", "premieres"): {"sort_by": "first_air_date.desc",
+                          "first_air_date.lte": "@today", "vote_count.gte": "5"},
+    ("tv", "upcoming"): {"sort_by": "first_air_date.asc",
+                         "first_air_date.gte": "@today"},
 }
+
+
+def named_params(media, key):
+    """Resolved discover params for a NAMED list (expands the @today token)."""
+    today = date.today().isoformat()
+    return {k: (today if v == "@today" else v)
+            for k, v in NAMED.get((media, key), {}).items()}
 
 
 # ---------------------------------------------------------------------------
@@ -95,11 +143,11 @@ def discover(media, page=1, **params):
 
 
 def genres(media):
-    return _get("genre/{0}/list".format(media), ttl=TTL_GENRE).get("genres", [])
+    return [{"id": gid, "name": name} for gid, name in GENRES.get(media, [])]
 
 
 def genre_map(media):
-    return {g["id"]: g["name"] for g in genres(media)}
+    return {gid: name for gid, name in GENRES.get(media, [])}
 
 
 def search(media, query, page=1):
