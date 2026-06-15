@@ -5,9 +5,16 @@
             <group id="1">
                 <setting id="tmdb_api_key" type="string" label="TMDB API Key">
                     <level>0</level>
-                    <default></default>
+                    <default>1248868d7003f60f2386595db98455ef</default>
                     <control type="edit" format="string">
                         <heading>TMDB API Key</heading>
+                    </control>
+                </setting>
+                <setting id="tmdb_lang" type="string" label="TMDB Language">
+                    <level>0</level>
+                    <default>en-US</default>
+                    <control type="edit" format="string">
+                        <heading>TMDB Language</heading>
                     </control>
                 </setting>
             </group>
