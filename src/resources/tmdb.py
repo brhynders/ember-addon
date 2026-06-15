@@ -15,8 +15,8 @@ from resources.framework import cache, get_setting, log_error
 
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p"
-# Public default key (works out of the box); users can override in settings.
-DEFAULT_KEY = "1248868d7003f60f2386595db98455ef"
+# Hardcoded TMDB v3 API key — not user-configurable.
+API_KEY = "1248868d7003f60f2386595db98455ef"
 
 POSTER_SIZE = "w500"
 FANART_SIZE = "w1280"
@@ -51,16 +51,12 @@ NAMED = {
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
-def _key():
-    return get_setting("tmdb_api_key") or DEFAULT_KEY
-
-
 def _lang():
     return get_setting("tmdb_lang") or "en-US"
 
 
 def _get(path, ttl=TTL_LIST, **params):
-    params.setdefault("api_key", _key())
+    params.setdefault("api_key", API_KEY)
     params.setdefault("language", _lang())
     ck_params = {k: v for k, v in params.items() if k != "api_key"}
     ck = "tmdb:{0}:{1}".format(path, json.dumps(ck_params, sort_keys=True))

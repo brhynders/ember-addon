@@ -1,13 +1,14 @@
 """Ember entry point — the route handlers and the run loop.
 
-Every screen in the add-on is a `@router.route(...)` handler here: it fetches
-from TMDB (resources/tmdb.py), builds a List of Items (resources/ui.py) linking
-to other routes, and renders. The framework (resources/framework/) only does
-routing + rendering; importing `playback` registers its /play routes too.
+Every route handler in the add-on lives here (the only module with
+`@router.route`): each fetches from TMDB (resources/tmdb.py), builds a List of
+Items (resources/ui.py) linking to other routes, and renders. The framework
+(resources/framework.py) only does routing + rendering; playback resolution
+mechanics live in resources/playback.py, which the /play handlers call.
 """
 from datetime import date
 
-from resources import playback, tmdb  # noqa: F401 — playback import registers routes
+from resources import playback, tmdb
 from resources.framework import cache, keyboard, notify, open_settings, router
 from resources.ui import Directory, Episode, Episodes, Menu, Movie, Movies, Show, Shows, cancel
 
@@ -196,6 +197,21 @@ def episodes_list(id, season):
             show_title=show_title, year=year, imdb=imdb)
         episodes.add(Episode(ep, show_info, show_art, url))
     episodes.render()
+
+
+# ---------------------------------------------------------------------------
+# Playback — resolve a media row's /play URL (placeholder until wired up)
+# ---------------------------------------------------------------------------
+@router.route("/play/movie/{id}")
+def play_movie(id):
+    notify("Playback isn't wired up yet")
+    playback.resolve(None)
+
+
+@router.route("/play/episode/{id}/{season}/{episode}")
+def play_episode(id, season, episode):
+    notify("Playback isn't wired up yet")
+    playback.resolve(None)
 
 
 # ---------------------------------------------------------------------------
