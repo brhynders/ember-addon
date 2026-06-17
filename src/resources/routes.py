@@ -298,13 +298,16 @@ def _show_sources(media_type, video_id, info, kodi_type):
     choice = select("Sources", labels)
     if choice >= 0:
         s = found[choice]
-        # Resolve to a direct CDN URL on this thread (with a spinner) so Kodi
-        # opens a final link instead of freezing while it chases a redirect.
-        # TorBox-direct (~1s) is the fast path; fall back to the add-on's own
-        # resolve URL if the hash is missing/uncached or the API call fails.
+        # Resolve the infohash to a direct CDN URL on this thread (with a
+        # spinner) so Kodi opens a final link instead of freezing. Sources were
+        # already filtered to TorBox-cached hashes, so this is the ~1s fast path;
+        # it can still fail if the transfer add/link step errors out.
         from resources import torbox  # lazy — only needed at play time
         with busy():
-            url = torbox.resolve(s.infohash, s.title) or scrapers.resolve(s.url)
+            url = torbox.resolve(s.infohash, s.title)
+        if not url:
+            notify("Couldn't resolve source")
+            return
         play(url, labels[choice], info, kodi_type)
 
 

@@ -8,6 +8,11 @@
         <setting id="torbox_api_key" type="text" label="TorBox API Key" default=""/>
         <setting id="scraper_torrentio" type="bool" label="Enable Torrentio" default="true"/>
         <setting id="scraper_comet" type="bool" label="Enable Comet" default="true"/>
-        <setting id="scraper_mediafusion" type="bool" label="Enable MediaFusion" default="true"/>
+    </category>
+    <category label="Filters">
+        <setting id="scraper_min_resolution" type="labelenum" label="Minimum resolution" values="SD|480p|720p|1080p|4K" default="SD"/>
+        <setting id="scraper_max_resolution" type="labelenum" label="Maximum resolution" values="SD|480p|720p|1080p|4K" default="4K"/>
+        <setting id="scraper_max_size_gb" type="text" label="Maximum size (GB, 0 = no limit)" default="0"/>
+        <setting id="scraper_languages" type="text" label="Preferred languages (comma-separated, blank = any)" default=""/>
     </category>
 </settings>

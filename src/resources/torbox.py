@@ -59,11 +59,31 @@ def _ok(resp):
     return isinstance(resp, dict) and resp.get("success")
 
 
-def is_cached(infohash):
-    """True if TorBox already has this hash (instant resolve, no download)."""
-    resp = _call("GET", "torrents/checkcached",
-                 params={"hash": infohash, "format": "list"})
-    return bool(_ok(resp) and resp.get("data"))
+def cached_hashes(infohashes):
+    """Subset of infohashes TorBox has cached, checked in as few calls as we can.
+
+    checkcached takes many comma-separated hashes at once; we chunk only to keep
+    the query string sane. Uncached hashes are simply absent from `data` (a list
+    of cached entries, or an object keyed by hash depending on the API mood — we
+    accept both). Hashes are matched case-insensitively.
+    """
+    wanted = list({h.lower() for h in infohashes if h})
+    cached = set()
+    for i in range(0, len(wanted), 100):
+        batch = wanted[i:i + 100]
+        resp = _call("GET", "torrents/checkcached",
+                     params={"hash": ",".join(batch), "format": "list"})
+        if not _ok(resp):
+            continue
+        data = resp.get("data")
+        if isinstance(data, dict):          # object keyed by hash -> cached entry
+            cached.update(h.lower() for h, v in data.items() if v)
+        else:                               # list of cached entries, each {hash: …}
+            for row in data or []:
+                h = row.get("hash", "") if isinstance(row, dict) else ""
+                if h:
+                    cached.add(h.lower())
+    return cached
 
 
 def _name(f):
@@ -96,10 +116,13 @@ def _delete(torrent_id):
 def resolve(infohash, filename=""):
     """A cached torrent hash -> direct CDN URL, or None if it can't be resolved.
 
-    None means "fall back to the add-on's own resolve URL" — the caller treats
-    an empty result as a cue to play stream.url instead.
+    createtorrent (instant for a cached hash) -> mylist (list files, pick the
+    right one) -> requestdl (direct link), then the transfer is deleted. Sources
+    are pre-filtered to cached hashes at scrape time, so we skip a checkcached
+    here; if a hash was evicted since, the added transfer is removed in finally.
+    None means the caller couldn't get a playable URL.
     """
-    if not _key() or len(infohash) != 40 or not is_cached(infohash):
+    if not _key() or len(infohash) != 40:
         return None
     created = _call("POST", "torrents/createtorrent",
                     data={"magnet": "magnet:?xt=urn:btih:" + infohash,
