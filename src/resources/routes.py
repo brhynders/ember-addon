@@ -16,9 +16,10 @@ from datetime import date
 # imported lazily inside the few handlers that need it, to keep that weight off
 # the menu-browsing path. tmdb/trakt are light and used pervasively, so stay here.
 from resources import tmdb, trakt
-from resources.framework import cache, keyboard, notify, open_settings, router
+from resources.framework import (busy, cache, keyboard, notify, open_settings,
+                                  play, router, select)
 from resources.ui import (Episode, Episodes, Menu, MenuItem, Movie, Movies, Season,
-                          Show, Shows, Source, Sources, cancel)
+                          Show, Shows, cancel, source_label)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +245,9 @@ def seasons_menu(id):
             continue
         info = dict(show_info)
         info["season"] = num
+        # title defaults to the show name; override so the row reads "Season N"
+        # (Kodi shows the VideoInfoTag title over our list label).
+        info["title"] = "Season {0}".format(num)
         info["plot"] = season.get("overview") or show_info.get("plot", "")
         art = dict(show_art)
         if season.get("poster_path"):
@@ -271,13 +275,15 @@ def episodes_list(id, season):
 
 
 # ---------------------------------------------------------------------------
-# Sources — scrape Stremio add-ons for playable streams, list them natively
+# Sources — scrape Stremio add-ons for playable streams, pick one from a dialog
 # ---------------------------------------------------------------------------
 def _show_sources(media_type, video_id, info, kodi_type):
-    """Render the source list for a Stremio id, or notify why it's empty.
+    """Scrape sources for a Stremio id, then play the user's pick from a dialog.
 
-    `info`/`kodi_type` ride along onto each Source so the played item carries
-    its tmdb id + season/episode, which the scrobbler service reads.
+    A modal picker (not a Kodi directory) shows the formatted source labels, so
+    nothing overrides them and the now-playing OSD keeps the real title. `info`/
+    `kodi_type` ride onto the played item so the scrobbler reads its tmdb id +
+    season/episode.
     """
     from resources import scrapers  # lazy — keeps concurrent.futures off the menu path
     if not scrapers.configured():
@@ -287,7 +293,19 @@ def _show_sources(media_type, video_id, info, kodi_type):
     if not found:
         notify("No sources found")
         return cancel()
-    Sources(Source(s, info=info, media_type=kodi_type) for s in found).render()
+    cancel()  # finish the navigation; we play via a dialog, not a directory
+    labels = [source_label(s) for s in found]
+    choice = select("Sources", labels)
+    if choice >= 0:
+        s = found[choice]
+        # Resolve to a direct CDN URL on this thread (with a spinner) so Kodi
+        # opens a final link instead of freezing while it chases a redirect.
+        # TorBox-direct (~1s) is the fast path; fall back to the add-on's own
+        # resolve URL if the hash is missing/uncached or the API call fails.
+        from resources import torbox  # lazy — only needed at play time
+        with busy():
+            url = torbox.resolve(s.infohash, s.title) or scrapers.resolve(s.url)
+        play(url, labels[choice], info, kodi_type)
 
 
 @router.route("/sources/movie/{id}")

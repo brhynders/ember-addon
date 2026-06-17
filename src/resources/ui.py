@@ -108,6 +108,9 @@ class Episode(Item):
         self.episode = info.get("episode")
         label = "{0}x{1:02d}. {2}".format(
             info.get("season") or 0, info.get("episode") or 0, info.get("title", ""))
+        # Kodi shows the VideoInfoTag title over our list label, so bake the
+        # season/episode prefix into the title too (else rows show only the name).
+        info["title"] = label
         super().__init__(label, url, info=info, art=art)
 
     def context_menu(self):
@@ -139,28 +142,12 @@ def _gb(size):
     return "{0:.2f} GB".format(size / 1073741824.0) if size else ""
 
 
-class Source(Item):
-    """A playable scraped source row — plays its resolved URL directly.
+def source_label(stream):
+    """The display string for one scraped source, shown in the picker dialog:
 
-    `info`/`media_type` carry the movie/episode identity (tmdb uniqueid +
-    season/episode) onto the played item, so the scrobbler service can report it.
+        1080p BluRay HDR  ·  2.45 GB  ·  English/French  ·  Torrentio
     """
-    is_folder = False
-    is_playable = True
-    media_type = "video"
-
-    def __init__(self, stream, info=None, media_type="video"):
-        meta = " · ".join(p for p in (
-            _gb(stream.size),
-            "{0} seeders".format(stream.seeders) if stream.seeders else "",
-            stream.scraper) if p)
-        label = "[{0}] {1}".format(stream.quality, stream.title)
-        if meta:
-            label += "  —  " + meta
-        super().__init__(label, stream.url, info=info, media_type=media_type,
-                         is_folder=False, is_playable=True)
-
-
-class Sources(List):
-    """A native list of scraped sources for one movie or episode."""
-    content = "videos"
+    head = " ".join([stream.quality] + stream.tags)
+    langs = "/".join(stream.languages[:3]) if stream.languages else ""
+    return "  ·  ".join(p for p in (
+        head, _gb(stream.size), langs, stream.scraper) if p)

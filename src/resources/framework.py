@@ -29,6 +29,7 @@ ends a directory itself when a dispatch fails, so Kodi doesn't hang.
 
 Video-only by charter: Item applies metadata via the InfoTagVideo API.
 """
+import contextlib
 import functools
 import json
 import os
@@ -122,6 +123,21 @@ def get_int(key, default=0):
 def keyboard(heading=""):
     """Prompt for text; returns "" if cancelled."""
     return xbmcgui.Dialog().input(heading) or ""
+
+
+def select(heading, options):
+    """Show a modal choice list; return the chosen index, or -1 if cancelled."""
+    return xbmcgui.Dialog().select(heading, options)
+
+
+@contextlib.contextmanager
+def busy():
+    """Show the non-cancelable busy spinner for the duration of the block."""
+    xbmc.executebuiltin("ActivateWindow(busydialognocancel)")
+    try:
+        yield
+    finally:
+        xbmc.executebuiltin("Dialog.Close(busydialognocancel)")
 
 
 def open_settings():
@@ -347,6 +363,21 @@ def _apply_info(li, info, media_type):
         tag.setUniqueID(str(info["tmdb"]), "tmdb")
 
 
+def play(url, label, info, media_type):
+    """Play a resolved URL directly, carrying `info` onto the item.
+
+    Used for scraped sources: the list is a modal dialog (not a Kodi directory),
+    so we build the played item ourselves. setContentLookup(False) skips Kodi's
+    pre-play MIME probe; the info tag (tmdb id + season/episode) lets the
+    scrobbler service identify what's playing while the OSD shows the real title.
+    """
+    li = xbmcgui.ListItem(label=label, path=url, offscreen=True)
+    li.setContentLookup(False)
+    if info:
+        _apply_info(li, info, media_type)
+    xbmc.Player().play(url, li)
+
+
 class Item:
     """One list item. Subclasses set the folder/playable/media-type defaults."""
     is_folder = True
@@ -391,6 +422,9 @@ class Item:
             _apply_info(li, self.info, self.media_type)
         if self.is_playable:
             li.setProperty("IsPlayable", "true")
+            # Skip Kodi's blocking pre-play HEAD request to sniff the MIME type;
+            # the path is already a direct debrid URL, so playback starts at once.
+            li.setContentLookup(False)
         for key, value in (self.properties or {}).items():
             li.setProperty(key, str(value))
         menu = self.context_menu()
