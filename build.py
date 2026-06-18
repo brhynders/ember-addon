@@ -38,17 +38,17 @@ BASE_URL = "https://brhynders.github.io/ember-addon"
 AUTHOR = "brhynders"  # provider-name for both add-ons
 
 # --- video add-on -----------------------------------------------------------
-PLUGIN_ID = "plugin.video.ember"
-PLUGIN_NAME = "Ember"
+PLUGIN_ID = "plugin.video.catalyst"
+PLUGIN_NAME = "Catalyst"
 VERSION = "0.1.0"
-SUMMARY = "Ember - lightweight movie & TV streaming"
+SUMMARY = "Catalyst - lightweight movie & TV streaming"
 DESCRIPTION = "A clean, English-only streaming browser built from scratch."
 LICENSE = "GPL-3.0-or-later"
 PYTHON_VERSION = "3.0.0"  # required xbmc.python version
 
 # --- bootstrap repository add-on -------------------------------------------
-REPO_ID = "repository.ember"
-REPO_NAME = "Ember Repository"
+REPO_ID = "repository.catalyst"
+REPO_NAME = "Catalyst Repository"
 REPO_VERSION = "1.0.0"
 
 # --- local install (./build.py --install) ----------------------------------
@@ -129,8 +129,10 @@ def install_local(plugin_stage):
     """Copy the freshly-staged add-on into the local Kodi addons dir."""
     addons_dir = find_kodi_addons_dir()
     if addons_dir is None:
-        print("  ! --install: no Kodi addons dir found "
-              "(set KODI_ADDONS_DIR in build.py or the env)")
+        print(
+            "  ! --install: no Kodi addons dir found "
+            "(set KODI_ADDONS_DIR in build.py or the env)"
+        )
         return
     dest = os.path.join(addons_dir, PLUGIN_ID)
     print("Installing {0} -> {1}".format(PLUGIN_ID, dest))
@@ -261,8 +263,9 @@ def main():
         print("Generating dist/index.html...")
         write(
             os.path.join(DIST, "index.html"),
-            "<!doctype html>\n"
-            '<a href="{repo}.zip">{repo}.zip</a>\n'.format(repo=REPO_ID),
+            '<!doctype html>\n<a href="{repo}.zip">{repo}.zip</a>\n'.format(
+                repo=REPO_ID
+            ),
         )
 
         # --- 6. optionally install into the local Kodi (./build.py --install)

@@ -2,10 +2,15 @@
 <settings>
     <category label="General">
         <setting id="tmdb_lang" type="text" label="TMDB Language" default="en-US"/>
+    </category>
+    <category label="Services">
+        <setting id="torbox_api_key" type="text" label="TorBox API Key" default=""/>
+        <setting type="sep"/>
         <setting id="trakt_scrobble" type="bool" label="Scrobble to Trakt" default="true"/>
+        <setting label="Authorize Trakt" type="action" action="RunPlugin(plugin://plugin.video.catalyst/trakt/authorize)" option="close"/>
+        <setting label="Sign Out of Trakt" type="action" action="RunPlugin(plugin://plugin.video.catalyst/trakt/signout)" option="close"/>
     </category>
     <category label="Scrapers">
-        <setting id="torbox_api_key" type="text" label="TorBox API Key" default=""/>
         <setting id="scraper_torrentio" type="bool" label="Enable Torrentio" default="true"/>
         <setting id="scraper_comet" type="bool" label="Enable Comet" default="true"/>
     </category>

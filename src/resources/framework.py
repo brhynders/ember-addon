@@ -361,6 +361,11 @@ def _apply_info(li, info, media_type):
         tag.setUniqueID(info["imdb"], "imdb")
     if info.get("tmdb"):
         tag.setUniqueID(str(info["tmdb"]), "tmdb")
+    if info.get("playcount") is not None:
+        try:
+            tag.setPlaycount(int(info["playcount"]))
+        except (ValueError, TypeError):
+            pass
 
 
 def play(url, label, info, media_type):

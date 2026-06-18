@@ -21,16 +21,18 @@ import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
-from resources.framework import get_bool, log_error, notify
+from resources.framework import cache, get_bool, log_error, notify
 
-# --- Trakt OAuth app credentials — fill these in from trakt.tv/oauth/applications
-CLIENT_ID = ""
-CLIENT_SECRET = ""
+# --- Trakt OAuth app credentials — from trakt.tv/oauth/applications
+CLIENT_ID = "a87a4a42ed04c4ac000ed7973c0fd4a4211b845add9fc5940b896c8fe84c996f"
+CLIENT_SECRET = "2bc1cd2b40a5e781e58a2c75d1ea45a9209dcb3cf98d6f8fbafada9d463ade2e"
 
 API = "https://api.trakt.tv"
 REDIRECT = "urn:ietf:wg:oauth:2.0:oob"
 _TIMEOUT = 20
 _PLURAL = {"movie": "movies", "tv": "shows"}
+_USER_AGENT = "{0}/{1}".format(xbmcaddon.Addon().getAddonInfo("id"),
+                               xbmcaddon.Addon().getAddonInfo("version"))
 
 
 # ===========================================================================
@@ -82,7 +84,8 @@ def _request(method, path, body=None, auth=True, quiet=False, _retry=True):
     if not CLIENT_ID:
         log_error("Trakt: no client_id configured")
         return None
-    headers = {"Content-Type": "application/json",
+    # A real User-Agent is required — Cloudflare 403s the default Python-urllib one.
+    headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT,
                "trakt-api-version": "2", "trakt-api-key": CLIENT_ID}
     if auth:
         token = _access_token()
@@ -144,8 +147,9 @@ def authorize():
         return
     dialog = xbmcgui.DialogProgress()
     dialog.create("Trakt Authorization",
-                  "Go to: {0}".format(info.get("verification_url", "trakt.tv/activate")),
-                  "Enter code: {0}".format(info.get("user_code", "")))
+                  "Go to: {0}\nEnter code: {1}".format(
+                      info.get("verification_url", "trakt.tv/activate"),
+                      info.get("user_code", "")))
     interval = max(1, int(info.get("interval", 5)))
     expires = int(info.get("expires_in", 600))
     waited = 0
@@ -226,6 +230,40 @@ def tmdb_ids(items, media):
         if tmdb_id:
             ids.append(tmdb_id)
     return ids
+
+
+# ===========================================================================
+# Watched library — used to stamp playcount on hydrated list items
+# ===========================================================================
+@cache.cached(ttl_minutes=10)
+def _watched_raw(media):
+    """The user's full watched library. Cached briefly so list renders don't
+    re-fetch it; the 10-min TTL refreshes it soon after a manual mark."""
+    return _request("GET", "/sync/watched/{0}".format(_PLURAL[media])) or []
+
+
+def watched_movie_plays():
+    """tmdb_id -> plays count for every watched movie."""
+    out = {}
+    for it in _watched_raw("movie"):
+        tmdb_id = ((it.get("movie") or {}).get("ids") or {}).get("tmdb")
+        if tmdb_id:
+            out[tmdb_id] = it.get("plays", 0)
+    return out
+
+
+def watched_show_episodes():
+    """tmdb_id -> count of watched episodes (excludes season 0 / specials).
+    Completeness is judged against TMDB's episode count by the caller, since
+    /sync/watched/shows carries no aired totals."""
+    out = {}
+    for it in _watched_raw("tv"):
+        tmdb_id = ((it.get("show") or {}).get("ids") or {}).get("tmdb")
+        if not tmdb_id:
+            continue
+        out[tmdb_id] = sum(len(s.get("episodes") or [])
+                           for s in (it.get("seasons") or []) if s.get("number"))
+    return out
 
 
 # ===========================================================================

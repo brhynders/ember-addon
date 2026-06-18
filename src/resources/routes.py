@@ -336,19 +336,31 @@ def episode_sources(id, season, episode):
 # Trakt — personalised lists (hydrated via TMDB) + watchlist/watched writes
 # ---------------------------------------------------------------------------
 def _hydrate(media, tmdb_ids):
-    """Fetch TMDB details for ids in parallel and build Movie/Show rows."""
+    """Fetch TMDB details for ids in parallel and build Movie/Show rows,
+    stamping a Trakt-backed playcount so watched items render as watched."""
     from concurrent.futures import ThreadPoolExecutor  # lazy — only Trakt lists need it
     fetch = tmdb.movie_details if media == "movie" else tmdb.show_details
     with ThreadPoolExecutor(max_workers=10) as pool:
         details = list(pool.map(fetch, tmdb_ids))
+    # One cached Trakt call per render; movies use plays, shows are watched only if complete.
+    watched = trakt.watched_movie_plays() if media == "movie" else trakt.watched_show_episodes()
     rows = []
     for data in details:
         if not data:
             continue
         if media == "movie":
-            rows.append(Movie(data, router.url_for("/sources/movie/{0}".format(data["id"]))))
+            item = Movie(data, router.url_for("/sources/movie/{0}".format(data["id"])))
+            plays = watched.get(data["id"])
+            if plays:
+                item.info["playcount"] = plays
         else:
-            rows.append(Show(data, router.url_for("/tv/show/{0}".format(data["id"]))))
+            item = Show(data, router.url_for("/tv/show/{0}".format(data["id"])))
+            # Trakt's watched count carries no aired total — compare against TMDB's.
+            # Specials/numbering mismatches can leave a show one short of "complete".
+            total = data.get("number_of_episodes") or 0
+            if total and watched.get(data["id"], 0) >= total:
+                item.info["playcount"] = 1
+        rows.append(item)
     return rows
 
 
