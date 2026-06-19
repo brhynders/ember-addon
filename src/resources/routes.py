@@ -19,7 +19,7 @@ from resources import tmdb, trakt
 from resources.framework import (Item, busy, cache, keyboard, notify,
                                   open_settings, router, set_resolved)
 from resources.ui import (Episode, Episodes, Menu, MenuItem, Movie, Movies, Season,
-                          Show, Shows, Source, Sources, cancel, source_label)
+                          Seasons, Show, Shows, Source, Sources, cancel, source_label)
 
 
 # ---------------------------------------------------------------------------
@@ -238,20 +238,34 @@ def seasons_menu(id):
     details = tmdb.show_details(id)
     show_info, show_art = tmdb.map_show(details, details=details)
     imdb = (details.get("external_ids") or {}).get("imdb_id", "")
-    menu = Menu()
+    # Per-season watched counts (Trakt) to flag fully-watched seasons; empty when
+    # not logged in, so every row falls back to the plain bullet.
+    watched = trakt.watched_seasons(int(id)) if trakt.authorized() else {}
+    # Seasons (not a plain Menu) so the directory's content type is "seasons" —
+    # that's what makes Kodi draw the watched square/checkmark overlay on rows.
+    menu = Seasons()
     for season in details.get("seasons", []):
         num = season.get("season_number")
         if not num:  # skip None and 0 ("Specials")
             continue
+        aired = season.get("episode_count") or 0
         info = dict(show_info)
         info["season"] = num
         # title defaults to the show name; override so the row reads "Season N"
         # (Kodi shows the VideoInfoTag title over our list label).
         info["title"] = "Season {0}".format(num)
         info["plot"] = season.get("overview") or show_info.get("plot", "")
-        art = dict(show_art)
-        if season.get("poster_path"):
-            art["poster"] = art["thumb"] = tmdb.image(season["poster_path"])
+        # Stamp playcount when the whole season is watched (per Trakt); Kodi then
+        # draws the watched checkmark itself, and the unwatched indicator otherwise.
+        if aired and watched.get(num, 0) >= aired:
+            info["playcount"] = 1
+        # Keep poster + fanart for the info panel / background (same as the episode
+        # list), but set NO thumb — that's what the list view paints as the row
+        # icon, so leaving it out keeps the row free of the poster (Kodi's watched
+        # overlay still draws on top).
+        art = {"fanart": show_art.get("fanart", ""),
+               "poster": (tmdb.image(season["poster_path"])
+                          if season.get("poster_path") else show_art.get("poster", ""))}
         url = router.url_for("/tv/show/{0}/season/{1}".format(id, num), imdb=imdb)
         menu.add(Season("Season {0}".format(num), url, id, num,
                         info=info, art=art, media_type="season"))

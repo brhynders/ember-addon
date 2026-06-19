@@ -114,7 +114,7 @@ class Episode(Item):
         self.show_tmdb = show_info.get("tmdb")
         self.season = info.get("season")
         self.episode = info.get("episode")
-        label = "{0}x{1:02d}. {2}".format(
+        label = "{0}x{1:02d} {2}".format(
             info.get("season") or 0, info.get("episode") or 0, info.get("title", ""))
         # Kodi shows the VideoInfoTag title over our list label, so bake the
         # season/episode prefix into the title too (else rows show only the name).
@@ -140,6 +140,10 @@ class Movies(List):
 
 class Shows(List):
     content = "tvshows"
+
+
+class Seasons(List):
+    content = "seasons"
 
 
 class Episodes(List):

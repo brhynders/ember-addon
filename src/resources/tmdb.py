@@ -243,9 +243,12 @@ def map_episode(item, show_info, show_art):
     }
     if item.get("runtime"):
         info["duration"] = item["runtime"] * 60
+    # Episode-specific still drives the poster/landscape the views use, falling
+    # back to the show's poster when an episode has no still; fanart stays
+    # show-level for the bg. No thumb — that's the list-row icon we don't want.
     still = _img(item.get("still_path"), STILL_SIZE)
-    art = {"poster": show_art.get("poster", ""),
-           "thumb": still or show_art.get("poster", ""),
+    art = {"poster": still or show_art.get("poster", ""),
+           "landscape": still or show_art.get("fanart", ""),
            "fanart": show_art.get("fanart", "")}
     return info, art
 

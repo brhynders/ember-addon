@@ -266,6 +266,17 @@ def watched_show_episodes():
     return out
 
 
+def watched_seasons(tmdb_id):
+    """{season_number: watched episode count} for one show (excludes specials).
+    The caller compares each against TMDB's aired count to judge completeness."""
+    for it in _watched_raw("tv"):
+        ids = (it.get("show") or {}).get("ids") or {}
+        if ids.get("tmdb") == tmdb_id:
+            return {s["number"]: len(s.get("episodes") or [])
+                    for s in (it.get("seasons") or []) if s.get("number")}
+    return {}
+
+
 # ===========================================================================
 # Writes — body built from context-menu params (type/tmdb/season/episode)
 # ===========================================================================
