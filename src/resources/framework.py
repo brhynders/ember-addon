@@ -318,69 +318,21 @@ router = Router()
 # The add-on subclasses these (resources/ui.py) to wrap TMDB data into rows; the
 # base classes know nothing about movies or TMDB.
 # ===========================================================================
-def _apply_info(li, info, media_type):
-    """Apply a metadata dict via the InfoTagVideo API (setInfo is deprecated)."""
-    tag = li.getVideoInfoTag()
-    tag.setMediaType(media_type)
-    if info.get("title"):
-        tag.setTitle(info["title"])
-    if info.get("plot"):
-        tag.setPlot(info["plot"])
-    if info.get("genres"):
-        tag.setGenres(info["genres"])
-    if info.get("premiered"):
-        tag.setPremiered(info["premiered"])
-    if info.get("tvshowtitle"):
-        tag.setTvShowTitle(info["tvshowtitle"])
-    if info.get("year"):
-        try:
-            tag.setYear(int(info["year"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("rating"):
-        try:
-            tag.setRating(float(info["rating"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("duration"):
-        try:
-            tag.setDuration(int(info["duration"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("season") is not None:
-        try:
-            tag.setSeason(int(info["season"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("episode") is not None:
-        try:
-            tag.setEpisode(int(info["episode"]))
-        except (ValueError, TypeError):
-            pass
-    if info.get("imdb"):
-        tag.setUniqueID(info["imdb"], "imdb")
-    if info.get("tmdb"):
-        tag.setUniqueID(str(info["tmdb"]), "tmdb")
-    if info.get("playcount") is not None:
-        try:
-            tag.setPlaycount(int(info["playcount"]))
-        except (ValueError, TypeError):
-            pass
+def set_resolved(item):
+    """Hand a playable Item to Kodi as the resolved stream URL (or signal failure).
 
-
-def play(url, label, info, media_type):
-    """Play a resolved URL directly, carrying `info` onto the item.
-
-    Used for scraped sources: the list is a modal dialog (not a Kodi directory),
-    so we build the played item ourselves. setContentLookup(False) skips Kodi's
-    pre-play MIME probe; the info tag (tmdb id + season/episode) lets the
-    scrobbler service identify what's playing while the OSD shows the real title.
+    Used for scraped sources: a /resolve route turns the chosen infohash into a
+    direct URL, wraps it in a playable Item, and passes that Item here. The item's
+    `info` (tmdb id + season/episode) rides onto its VideoInfoTag so the scrobbler
+    service can identify what's playing while the OSD shows the title. Passing None
+    reports an unresolved source to Kodi (its "playback failed" path).
     """
-    li = xbmcgui.ListItem(label=label, path=url, offscreen=True)
-    li.setContentLookup(False)
-    if info:
-        _apply_info(li, info, media_type)
-    xbmc.Player().play(url, li)
+    if item is None:
+        xbmcplugin.setResolvedUrl(router.handle, False, xbmcgui.ListItem())
+        return
+    li = item.listitem()
+    li.setPath(item.url)
+    xbmcplugin.setResolvedUrl(router.handle, True, li)
 
 
 class Item:
@@ -412,6 +364,57 @@ class Item:
         """
         return []
 
+    def _apply_info(self, li):
+        """Apply self.info onto li's VideoInfoTag (the API that replaced the
+        deprecated setInfo). Subclasses vary what's in self.info, not how it maps."""
+        info = self.info
+        tag = li.getVideoInfoTag()
+        tag.setMediaType(self.media_type)
+        if info.get("title"):
+            tag.setTitle(info["title"])
+        if info.get("plot"):
+            tag.setPlot(info["plot"])
+        if info.get("genres"):
+            tag.setGenres(info["genres"])
+        if info.get("premiered"):
+            tag.setPremiered(info["premiered"])
+        if info.get("tvshowtitle"):
+            tag.setTvShowTitle(info["tvshowtitle"])
+        if info.get("year"):
+            try:
+                tag.setYear(int(info["year"]))
+            except (ValueError, TypeError):
+                pass
+        if info.get("rating"):
+            try:
+                tag.setRating(float(info["rating"]))
+            except (ValueError, TypeError):
+                pass
+        if info.get("duration"):
+            try:
+                tag.setDuration(int(info["duration"]))
+            except (ValueError, TypeError):
+                pass
+        if info.get("season") is not None:
+            try:
+                tag.setSeason(int(info["season"]))
+            except (ValueError, TypeError):
+                pass
+        if info.get("episode") is not None:
+            try:
+                tag.setEpisode(int(info["episode"]))
+            except (ValueError, TypeError):
+                pass
+        if info.get("imdb"):
+            tag.setUniqueID(info["imdb"], "imdb")
+        if info.get("tmdb"):
+            tag.setUniqueID(str(info["tmdb"]), "tmdb")
+        if info.get("playcount") is not None:
+            try:
+                tag.setPlaycount(int(info["playcount"]))
+            except (ValueError, TypeError):
+                pass
+
     def listitem(self):
         # offscreen=True builds a lightweight data item (no per-item GUI locking),
         # which is the key speedup for rendering a directory of many items.
@@ -424,7 +427,7 @@ class Item:
         if art:
             li.setArt(art)
         if self.info:
-            _apply_info(li, self.info, self.media_type)
+            self._apply_info(li)
         if self.is_playable:
             li.setProperty("IsPlayable", "true")
             # Skip Kodi's blocking pre-play HEAD request to sniff the MIME type;

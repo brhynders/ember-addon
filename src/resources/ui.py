@@ -80,6 +80,14 @@ class Show(Item):
             _watched_ctx("Show", type="show", tmdb=self.tmdb)
 
 
+class Source(Item):
+    """A scraped stream row: playable, with no info tag so the row keeps showing
+    its source label (Kodi paints a VideoInfoTag title over the list label). The
+    url points at /resolve, which turns the infohash into a stream URL on click."""
+    is_folder = False
+    is_playable = True
+
+
 class Season(MenuItem):
     """A season folder (opens its episodes). Carries show id + season number
     so it can offer mark-watched/unwatched for the whole season."""
@@ -136,6 +144,11 @@ class Shows(List):
 
 class Episodes(List):
     content = "episodes"
+
+
+class Sources(List):
+    """The scraped-streams directory for one title — playable Source rows."""
+    content = "videos"
 
 
 def _gb(size):

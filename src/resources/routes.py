@@ -16,10 +16,10 @@ from datetime import date
 # imported lazily inside the few handlers that need it, to keep that weight off
 # the menu-browsing path. tmdb/trakt are light and used pervasively, so stay here.
 from resources import tmdb, trakt
-from resources.framework import (busy, cache, keyboard, notify, open_settings,
-                                  play, router, select)
+from resources.framework import (Item, busy, cache, keyboard, notify,
+                                  open_settings, router, set_resolved)
 from resources.ui import (Episode, Episodes, Menu, MenuItem, Movie, Movies, Season,
-                          Show, Shows, cancel, source_label)
+                          Show, Shows, Source, Sources, cancel, source_label)
 
 
 # ---------------------------------------------------------------------------
@@ -275,15 +275,16 @@ def episodes_list(id, season):
 
 
 # ---------------------------------------------------------------------------
-# Sources — scrape Stremio add-ons for playable streams, pick one from a dialog
+# Sources — scrape Stremio add-ons for playable streams, list them as a folder
 # ---------------------------------------------------------------------------
-def _show_sources(media_type, video_id, info, kodi_type):
-    """Scrape sources for a Stremio id, then play the user's pick from a dialog.
+def _sources_list(media_type, video_id, resolve_params):
+    """Scrape sources for a Stremio id and render them as a playable directory.
 
-    A modal picker (not a Kodi directory) shows the formatted source labels, so
-    nothing overrides them and the now-playing OSD keeps the real title. `info`/
-    `kodi_type` ride onto the played item so the scrobbler reads its tmdb id +
-    season/episode.
+    Each row is a Source whose url hits /resolve to turn its infohash into a
+    stream URL on click. `resolve_params` (tmdb id, Kodi media type, optional
+    season/episode + display title) ride onto every row's url so the played item
+    carries the ids the Trakt scrobbler reads off the VideoInfoTag. Rows carry no
+    info tag, so Kodi shows the formatted source label instead of a title.
     """
     from resources import scrapers  # lazy — keeps concurrent.futures off the menu path
     if not scrapers.configured():
@@ -293,22 +294,13 @@ def _show_sources(media_type, video_id, info, kodi_type):
     if not found:
         notify("No sources found")
         return cancel()
-    cancel()  # finish the navigation; we play via a dialog, not a directory
-    labels = [source_label(s) for s in found]
-    choice = select("Sources", labels)
-    if choice >= 0:
-        s = found[choice]
-        # Resolve the infohash to a direct CDN URL on this thread (with a
-        # spinner) so Kodi opens a final link instead of freezing. Sources were
-        # already filtered to TorBox-cached hashes, so this is the ~1s fast path;
-        # it can still fail if the transfer add/link step errors out.
-        from resources import torbox  # lazy — only needed at play time
-        with busy():
-            url = torbox.resolve(s.infohash, s.title)
-        if not url:
-            notify("Couldn't resolve source")
-            return
-        play(url, labels[choice], info, kodi_type)
+    lst = Sources()
+    for s in found:
+        label = source_label(s)
+        url = router.url_for("/resolve/{0}".format(s.infohash),
+                             release=s.title, label=label, **resolve_params)
+        lst.add(Source(label, url))
+    lst.render()
 
 
 @router.route("/sources/movie/{id}")
@@ -319,7 +311,9 @@ def movie_sources(id):
         notify("No IMDb id for this title")
         return cancel()
     info, _art = tmdb.map_movie(details)
-    _show_sources("movie", imdb, info, "movie")
+    _sources_list("movie", imdb,
+                  {"mediatype": "movie", "tmdb": info.get("tmdb"),
+                   "title": info.get("title", "")})
 
 
 @router.route("/sources/episode/{id}/{season}/{episode}")
@@ -328,8 +322,38 @@ def episode_sources(id, season, episode):
     if not imdb:
         notify("No IMDb id for this show")
         return cancel()
-    info = {"tmdb": int(id), "season": int(season), "episode": int(episode)}
-    _show_sources("series", "{0}:{1}:{2}".format(imdb, season, episode), info, "episode")
+    _sources_list("series", "{0}:{1}:{2}".format(imdb, season, episode),
+                  {"mediatype": "episode", "tmdb": id,
+                   "season": season, "episode": episode})
+
+
+@router.route("/resolve/{infohash}")
+def resolve_source(infohash):
+    """Resolve a chosen source's infohash to a stream URL and hand it to Kodi.
+
+    Sources were filtered to TorBox-cached hashes at scrape time, so this is the
+    ~1s fast path — resolve on this thread under a spinner so Kodi opens a final
+    link instead of freezing; it can still fail if the transfer add/link errors.
+    The played item carries the tmdb id (+ season/episode) so the scrobbler can
+    identify it; rows passed no title for episodes, so the source label shows.
+    """
+    p = router.params
+    from resources import torbox  # lazy — only needed at play time
+    with busy():
+        url = torbox.resolve(infohash, p.get("release", ""))
+    if not url:
+        notify("Couldn't resolve source")
+        return set_resolved(None)
+    info = {"tmdb": p.get("tmdb")}
+    if p.get("title"):
+        info["title"] = p["title"]
+    if p.get("season"):
+        info["season"] = int(p["season"])
+        info["episode"] = int(p["episode"])
+    item = Item(p.get("label", ""), url, info=info,
+                media_type=p.get("mediatype", "video"),
+                is_folder=False, is_playable=True)
+    set_resolved(item)
 
 
 # ---------------------------------------------------------------------------
